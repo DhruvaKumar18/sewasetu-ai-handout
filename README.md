@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Sewa Setu — Old Age Pension Portal
 
 Department of Social Welfare, Government of Purvanchal. Maintained in-house.
@@ -81,3 +82,7 @@ portal, checks `aud` is its own canonical URL, and reads `scope`, `role` and `su
 
 Long-lived **program tokens** for unattended use (role officer) are issued by an
 administrator at `/admin/tokens`.
+=======
+# sewasetu-ai-handout
+The Build for Bharat fellowship aims to identify and train early-career public-interest technologists who can strengthen, modernize and humanize the digital technologies used to address India’s most urgent public and governance challenges.
+>>>>>>> 0a6ac5aca6030644c6fa64b10777ee8eecbe5ebe
