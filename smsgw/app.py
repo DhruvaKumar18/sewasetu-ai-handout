@@ -12,9 +12,11 @@ app = Flask(__name__)
 
 MESSAGES = []  # {id, to, text, sent_at, delivery_at}
 
+import os
+
 # Carrier queue latency, seconds.
-DELAY_MIN = 1
-DELAY_MAX = 4
+DELAY_MIN = int(os.environ.get("SMS_DELAY_MIN", 1))
+DELAY_MAX = int(os.environ.get("SMS_DELAY_MAX", 4))
 
 CONSOLE = """
 <!doctype html><html><head><title>PurvSMS Console</title>

@@ -1,0 +1,759 @@
+{
+  "timestamp": "2026-10-17 10:02:14",
+  "total_personas": 6,
+  "passed_personas": 6,
+  "failed_personas": 0,
+  "total_assertions": 15,
+  "passed_assertions": 15,
+  "failed_assertions": 0,
+  "pass_rate_percentage": 100.0,
+  "personas": [
+    {
+      "id": "persona-1-dhiren",
+      "role": "citizen",
+      "name": "Dhiren Gogoi",
+      "age": 67,
+      "dob": "12/04/1959",
+      "village": "Sapekhati",
+      "block": "Borgaon",
+      "mobile": "9864012345",
+      "bank_account": "34567890123",
+      "ifsc": "SBIN0003077",
+      "avatar": "\ud83d\udc74",
+      "background": "Elderly tea smallholder from rural Borgaon. Has never used government portals before and is seeking pension support after turning 67. Speaks plain rural English/Assamese style.",
+      "intent": "Verify eligibility, receive and verify OTP, and submit a complete valid Old Age Pension application.",
+      "dialogue_prompt": "Namaskar. I am Dhiren Gogoi, age 67 from Sapekhati village in Borgaon. Can I get old age pension? Please help me apply.",
+      "expected_db_state": "A new row in 'applications' with status 'PENDING', a new account in 'portal_users', and audit log record 'SUBMIT'.",
+      "passed": true,
+      "duration_seconds": 0.27,
+      "assertions": [
+        {
+          "description": "Application record created with status 'PENDING' in block 'Borgaon'",
+          "sql": "SELECT status, block FROM applications WHERE mobile = '9864012345'",
+          "expected": "status = 'PENDING', block = 'Borgaon'",
+          "actual": "status = 'PENDING', block = 'Borgaon'",
+          "passed": true
+        },
+        {
+          "description": "Citizen portal user created with password hashed from DOB (12041959)",
+          "sql": "SELECT mobile, password_hash FROM portal_users WHERE mobile = '9864012345'",
+          "expected": "mobile = '9864012345', hash matches sha256(DOB)",
+          "actual": "mobile = '9864012345', hash matches",
+          "passed": true
+        },
+        {
+          "description": "Statutory audit trail logs 'SUBMIT' action with applicant actor",
+          "sql": "SELECT action, actor FROM audit_log WHERE application_id = 100050",
+          "expected": "action = 'SUBMIT', actor = 'applicant:9864012345'",
+          "actual": "action = 'SUBMIT', actor = 'applicant:9864012345'",
+          "passed": true
+        }
+      ],
+      "conversation_logs": [
+        {
+          "sender": "citizen",
+          "message": "Namaskar. I am Dhiren Gogoi, age 67 from Sapekhati village in Borgaon. Can I get old age pension? Please help me apply."
+        },
+        {
+          "sender": "assistant",
+          "message": "Checking eligibility for Dhiren Gogoi (DOB: 12/04/1959, Block: Borgaon)...",
+          "tool_call": "check_eligibility",
+          "tool_args": {
+            "dob": "12/04/1959",
+            "block": "Borgaon"
+          },
+          "tool_result": {
+            "eligible": true,
+            "calculated_age": 67,
+            "minimum_age_required": 60,
+            "block": "Borgaon",
+            "block_recognized": true,
+            "reasons": [
+              "Applicant meets all statutory age and block criteria for Old Age Pension."
+            ]
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "Sending SMS verification OTP to 9864012345...",
+          "tool_call": "send_citizen_otp",
+          "tool_args": {
+            "mobile": "9864012345"
+          },
+          "tool_result": {
+            "success": true,
+            "mobile": "9864012345",
+            "validity_seconds": 300,
+            "message": "Verification OTP has been sent via SMS to 9864012345. Valid for 5 minutes."
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "Verifying 6-digit OTP code received on citizen phone...",
+          "tool_call": "verify_citizen_otp",
+          "tool_args": {
+            "mobile": "9864012345",
+            "otp": "170982"
+          },
+          "tool_result": {
+            "verified": true,
+            "authenticated": true,
+            "mobile": "9864012345",
+            "access_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjBhNmVhMDExMGZmZDQ0YmMiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAiLCJzdWIiOiJjaXRpemVuOjk4NjQwMTIzNDUiLCJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAiLCJzY29wZSI6ImNpdGl6ZW4iLCJyb2xlIjoiY2l0aXplbiIsImNsaWVudF9pZCI6ImNpdGl6ZW4tbWNwLWFnZW50IiwiaWF0IjoxNzkyMjExNTM0LCJleHAiOjE3OTIyMTI3MzQsImp0aSI6ImRjMTE0YWNjYWQxZDk3YzI4NDk5OGJjZiIsImtpbmQiOiJhY2Nlc3MiLCJzZXNzaW9uX2VuZHMiOjE3OTIyMTg3MzR9.hEdEw-NLU9peczuz0wr1_1y5_Id5w4yPQ72rXwS9Cu4tFd0M0oWMMMeTlrEMj9HPEEBPHUm66skdST3xZnj9xKitIKsU5T0WgeUMwap3B4a76XyLzrS-SvtmRWrVdwo5jhTxofs_vV0CYlaVFATkPrIbh6AaOK1jBAftOQfVh3EbauM-DK6Qf5BGBtJYEfmRBMnB7s-oNrhgbad3jedIE2QSy2Qxn8nsGVQT1K1rFc2Df62n9Vnqa8bbp30Nte-ARPab3Tp11Ku-obHKDlzhRClKDsfVLvMDGR-ixOP3zndgTarssMWdeC0znc8VwWZuizd5oUnMi7c4bSBG8mNpnQ",
+            "token_type": "Bearer",
+            "expires_in": 1200,
+            "session_ends": "2026-10-17T12:02:14",
+            "message": "OTP successfully verified. Citizen 9864012345 is now authenticated. Bearer token issued for subsequent authenticated sessions."
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "Submitting complete pension application to Sewa Setu portal...",
+          "tool_call": "submit_pension_application",
+          "tool_args": {
+            "applicant_name": "Dhiren Gogoi",
+            "dob": "12/04/1959",
+            "gender": "Male",
+            "marital_status": "Married",
+            "village": "Sapekhati",
+            "block": "Borgaon",
+            "bank_account": "34567890123",
+            "ifsc": "SBIN0003077",
+            "mobile": "9864012345",
+            "document_name": "aadhaar_card.pdf"
+          },
+          "tool_result": {
+            "success": true,
+            "application_id": 100050,
+            "application_no": "SSP26785185",
+            "status": "PENDING",
+            "applicant_name": "Dhiren Gogoi",
+            "mobile": "9864012345",
+            "dob": "12/04/1959",
+            "block": "Borgaon",
+            "village": "Sapekhati",
+            "submitted_at": "2026-10-17T10:02:14",
+            "sla_days": 15,
+            "message": "Pension application SSP26785185 successfully submitted for Dhiren Gogoi. Status is PENDING. Under the Right to Public Services Act, statutory SLA is 15 days."
+          }
+        }
+      ]
+    },
+    {
+      "id": "persona-2-anjali",
+      "role": "citizen",
+      "name": "Anjali Barua",
+      "age": 54,
+      "dob": "20/09/1972",
+      "village": "Charing",
+      "block": "Namti",
+      "mobile": "9864098765",
+      "bank_account": "45678901234",
+      "ifsc": "PUNB0024500",
+      "avatar": "\ud83d\udc69",
+      "background": "Weaver from Namti block seeking financial relief. Believes pension begins at age 50 and wants to submit an application today.",
+      "intent": "Inquire about applying for pension. The assistant must enforce the statutory minimum age of 60 and refuse invalid submission.",
+      "dialogue_prompt": "Pranam officer, I am Anjali Barua, born 20/09/1972 from Charing village. I need pension money urgently. Please submit my form.",
+      "expected_db_state": "NO application row in 'applications' and NO account in 'portal_users'. Scheme age threshold (60) strictly upheld.",
+      "passed": true,
+      "duration_seconds": 0.05,
+      "assertions": [
+        {
+          "description": "Eligibility check accurately flags age requirement breach (54 < 60)",
+          "sql": "check_eligibility({'dob': '20/09/1972', 'block': 'Namti'})",
+          "expected": "eligible = False, calculated_age = 54",
+          "actual": "eligible = False, calculated_age = 54",
+          "passed": true
+        },
+        {
+          "description": "Database strictly contains ZERO application records for underage citizen",
+          "sql": "SELECT count(*) FROM applications WHERE mobile = '9864098765'",
+          "expected": "0 records",
+          "actual": "0 records",
+          "passed": true
+        },
+        {
+          "description": "No portal account created for ineligible applicant",
+          "sql": "SELECT count(*) FROM portal_users WHERE mobile = '9864098765'",
+          "expected": "0 records",
+          "actual": "0 records",
+          "passed": true
+        }
+      ],
+      "conversation_logs": [
+        {
+          "sender": "citizen",
+          "message": "Pranam officer, I am Anjali Barua, born 20/09/1972 from Charing village. I need pension money urgently. Please submit my form."
+        },
+        {
+          "sender": "assistant",
+          "message": "Checking scheme eligibility for Anjali Barua...",
+          "tool_call": "check_eligibility",
+          "tool_args": {
+            "dob": "20/09/1972",
+            "block": "Namti"
+          },
+          "tool_result": {
+            "eligible": false,
+            "calculated_age": 54,
+            "minimum_age_required": 60,
+            "block": "Namti",
+            "block_recognized": true,
+            "reasons": [
+              "Applicant age (54 years) is below minimum required age of 60 years."
+            ]
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "Respected Anjali Barua, based on your date of birth (20/09/1972), your calculated age is 54 years. Under the Purvanchal Old Age Pension Scheme guidelines, the statutory minimum age is 60 years. Therefore, we cannot submit an application at this time. You will be eligible once you attain age 60."
+        },
+        {
+          "sender": "system",
+          "message": "Enforcement check: Direct submission rejection test",
+          "tool_call": "submit_pension_application",
+          "tool_args": {
+            "applicant_name": "Anjali Barua",
+            "dob": "20/09/1972",
+            "village": "Charing",
+            "block": "Namti",
+            "bank_account": "45678901234",
+            "ifsc": "PUNB0024500",
+            "mobile": "9864098765"
+          },
+          "tool_result": {
+            "success": false,
+            "error": "validation_failed",
+            "errors": [
+              "applicant must be 60 years of age or above"
+            ],
+            "message": "Application validation failed: applicant must be 60 years of age or above"
+          }
+        }
+      ]
+    },
+    {
+      "id": "persona-3-bhaben",
+      "role": "citizen",
+      "name": "Bhaben Kalita",
+      "age": 71,
+      "dob": "05/01/1955",
+      "village": "Tezpur Sadar",
+      "block": "Tezpur",
+      "mobile": "9864033221",
+      "bank_account": "56789012345",
+      "ifsc": "SBIN0001234",
+      "avatar": "\ud83e\uddd3",
+      "background": "71-year-old retired clerk residing in Tezpur municipality, which is outside the 6 recognized rural blocks under the Purvanchal pilot scheme.",
+      "intent": "Attempt to apply from an ineligible block. Assistant must recognize block is outside jurisdiction and decline submission.",
+      "dialogue_prompt": "Hello, I am Bhaben Kalita, 71 years old living in Tezpur Sadar. I want to register for Sewa Setu pension.",
+      "expected_db_state": "NO application record created. Eligibility check fails on unrecognized block with helpful advisory of eligible blocks.",
+      "passed": true,
+      "duration_seconds": 0.04,
+      "assertions": [
+        {
+          "description": "System flags block outside recognized pilot jurisdiction",
+          "sql": "check_eligibility(dob='05/01/1955', block='Tezpur')",
+          "expected": "eligible = False, block_recognized = False",
+          "actual": "eligible = False, block_recognized = False",
+          "passed": true
+        },
+        {
+          "description": "Zero records created for invalid block",
+          "sql": "SELECT count(*) FROM applications WHERE mobile = '9864033221'",
+          "expected": "0 records",
+          "actual": "0 records",
+          "passed": true
+        }
+      ],
+      "conversation_logs": [
+        {
+          "sender": "citizen",
+          "message": "Hello, I am Bhaben Kalita, 71 years old living in Tezpur Sadar. I want to register for Sewa Setu pension."
+        },
+        {
+          "sender": "assistant",
+          "message": "Verifying block eligibility for Tezpur...",
+          "tool_call": "check_eligibility",
+          "tool_args": {
+            "dob": "05/01/1955",
+            "block": "Tezpur"
+          },
+          "tool_result": {
+            "eligible": false,
+            "calculated_age": 71,
+            "minimum_age_required": 60,
+            "block": "Tezpur",
+            "block_recognized": false,
+            "reasons": [
+              "Block 'Tezpur' is not eligible. Eligible blocks: Sonari, Rajapara, Dhemaji Pathar, Borgaon, Namti, Khelua."
+            ]
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "Respected Bhaben Kalita, while you meet the age criteria (71 years), the block 'Tezpur' is currently not eligible for this pension pilot. The recognized blocks are: Sonari, Rajapara, Dhemaji Pathar, Borgaon, Namti, Khelua. We cannot register an application from Tezpur."
+        }
+      ]
+    },
+    {
+      "id": "persona-4-mina",
+      "role": "citizen",
+      "name": "Mina Das",
+      "age": 65,
+      "dob": "18/06/1961",
+      "village": "Bordoloi",
+      "block": "Rajapara",
+      "mobile": "9864044556",
+      "bank_account": "67890123456",
+      "ifsc": "PUNB0024500",
+      "avatar": "\ud83d\udc75",
+      "background": "Previously submitted an application with a typographical error in her bank details. Now wishes to correct her bank account, but is blocked by the portal's single-live-application constraint.",
+      "intent": "Detect existing PENDING application, guide/execute voluntary withdrawal, and submit a fresh corrected application.",
+      "dialogue_prompt": "I made a mistake in my bank account number in my last application. Can I change it or submit a new one?",
+      "expected_db_state": "Initial application transitioned to 'WITHDRAWN'; fresh application successfully submitted with status 'PENDING'.",
+      "passed": true,
+      "duration_seconds": 0.2,
+      "assertions": [
+        {
+          "description": "Previous erroneous application transitioned to 'WITHDRAWN'",
+          "sql": "SELECT status FROM applications WHERE id = 100051",
+          "expected": "status = 'WITHDRAWN'",
+          "actual": "status = 'WITHDRAWN'",
+          "passed": true
+        },
+        {
+          "description": "Fresh application successfully accepted in 'PENDING' status with corrected IFSC",
+          "sql": "SELECT status, ifsc FROM applications WHERE mobile = '9864044556' AND status = 'PENDING'",
+          "expected": "status = 'PENDING', ifsc = 'PUNB0024500'",
+          "actual": "status = 'PENDING', ifsc = 'PUNB0024500'",
+          "passed": true
+        },
+        {
+          "description": "Audit trail records statutory 'WITHDRAW' action by applicant",
+          "sql": "SELECT action FROM audit_log WHERE application_id = 100051",
+          "expected": "action = 'WITHDRAW'",
+          "actual": "Found 1 withdrawal audit entries",
+          "passed": true
+        }
+      ],
+      "conversation_logs": [
+        {
+          "sender": "citizen",
+          "message": "I made a mistake in my bank account number in my last application. Can I change it or submit a new one?"
+        },
+        {
+          "sender": "assistant",
+          "message": "Checking existing application status for mobile 9864044556...",
+          "tool_call": "get_application_status",
+          "tool_args": {
+            "mobile": "9864044556"
+          },
+          "tool_result": {
+            "found": true,
+            "application_id": 100051,
+            "application_no": "SSP26M44556",
+            "applicant_name": "Mina Das",
+            "mobile": "9864044556",
+            "dob": "18/06/1961",
+            "village": "Bordoloi",
+            "block": "Rajapara",
+            "bank_account_last4": "3456",
+            "ifsc": "WRONG000123",
+            "status": "PENDING",
+            "submitted_at": "2026-10-14T10:02:14",
+            "decided_at": null,
+            "decided_by": null,
+            "days_since_submission": 3,
+            "statutory_sla_days": 15,
+            "audit_trail": [
+              {
+                "action": "SUBMIT",
+                "actor": "applicant:9864044556",
+                "note": "",
+                "timestamp": "2026-10-17T10:02:14"
+              }
+            ],
+            "status_description": "Application is pending review by the Block Development Officer."
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "You currently have active application SSP26M44556 in PENDING status. Under portal rules, an applicant cannot submit two active applications. I will first withdraw your pending application so you can reapply with corrected bank details."
+        },
+        {
+          "sender": "assistant",
+          "message": "Withdrawing application SSP26M44556...",
+          "tool_call": "withdraw_pension_application",
+          "tool_args": {
+            "application_no": "SSP26M44556",
+            "mobile": "9864044556"
+          },
+          "tool_result": {
+            "success": true,
+            "application_no": "SSP26M44556",
+            "status": "WITHDRAWN",
+            "message": "Application SSP26M44556 has been successfully withdrawn. You may now apply afresh."
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "Submitting fresh application with corrected IFSC (PUNB0024500)...",
+          "tool_call": "submit_pension_application",
+          "tool_args": {
+            "applicant_name": "Mina Das",
+            "dob": "18/06/1961",
+            "gender": "Female",
+            "marital_status": "Widowed",
+            "village": "Bordoloi",
+            "block": "Rajapara",
+            "bank_account": "67890123456",
+            "ifsc": "PUNB0024500",
+            "mobile": "9864044556"
+          },
+          "tool_result": {
+            "success": true,
+            "application_id": 100052,
+            "application_no": "SSP26645129",
+            "status": "PENDING",
+            "applicant_name": "Mina Das",
+            "mobile": "9864044556",
+            "dob": "18/06/1961",
+            "block": "Rajapara",
+            "village": "Bordoloi",
+            "submitted_at": "2026-10-17T10:02:14",
+            "sla_days": 15,
+            "message": "Pension application SSP26645129 successfully submitted for Mina Das. Status is PENDING. Under the Right to Public Services Act, statutory SLA is 15 days."
+          }
+        }
+      ]
+    },
+    {
+      "id": "persona-5-prabin",
+      "role": "citizen",
+      "name": "Prabin Chetia",
+      "age": 68,
+      "dob": "02/08/1958",
+      "village": "Khelua Gaon",
+      "block": "Khelua",
+      "mobile": "9864055443",
+      "bank_account": "78901234567",
+      "ifsc": "SBIN0005678",
+      "avatar": "\ud83d\udc68\u200d\ud83e\uddb3",
+      "background": "Senior citizen whose daughter helped submit an application 10 days ago. Wants to know the current status, statutory SLA remaining, and download official PDF acknowledgment.",
+      "intent": "Query status, receive SLA turnaround estimate, and get official PDF acknowledgment receipt.",
+      "dialogue_prompt": "My application was submitted about 10 days back. What is the current status and how can I get my receipt paper?",
+      "expected_db_state": "Application status accurately reported as PENDING with 10 days elapsed against 15-day SLA; valid PDF acknowledgment link generated.",
+      "passed": true,
+      "duration_seconds": 0.13,
+      "assertions": [
+        {
+          "description": "Status correctly returns 'PENDING' and elapsed time (10 days) against 15-day SLA",
+          "sql": "get_application_status(mobile='9864055443')",
+          "expected": "status = 'PENDING', days_since_submission >= 9, statutory_sla_days = 15",
+          "actual": "status = 'PENDING', days = 10",
+          "passed": true
+        },
+        {
+          "description": "Official acknowledgment returns correct application receipt and PDF link",
+          "sql": "get_acknowledgment(application_no='SSP26E55443')",
+          "expected": "found = True, pdf_url contains '/ack/100053.pdf'",
+          "actual": "found = True, url = http://localhost:8000/ack/100053.pdf",
+          "passed": true
+        }
+      ],
+      "conversation_logs": [
+        {
+          "sender": "citizen",
+          "message": "My application was submitted about 10 days back. What is the current status and how can I get my receipt paper?"
+        },
+        {
+          "sender": "assistant",
+          "message": "Looking up application details for mobile 9864055443...",
+          "tool_call": "get_application_status",
+          "tool_args": {
+            "mobile": "9864055443"
+          },
+          "tool_result": {
+            "found": true,
+            "application_id": 100053,
+            "application_no": "SSP26E55443",
+            "applicant_name": "Prabin Chetia",
+            "mobile": "9864055443",
+            "dob": "02/08/1958",
+            "village": "Khelua Gaon",
+            "block": "Khelua",
+            "bank_account_last4": "4567",
+            "ifsc": "SBIN0005678",
+            "status": "PENDING",
+            "submitted_at": "2026-10-07T10:02:14",
+            "decided_at": null,
+            "decided_by": null,
+            "days_since_submission": 10,
+            "statutory_sla_days": 15,
+            "audit_trail": [
+              {
+                "action": "SUBMIT",
+                "actor": "applicant:9864055443",
+                "note": "",
+                "timestamp": "2026-10-17T10:02:14"
+              }
+            ],
+            "status_description": "Application is pending review by the Block Development Officer."
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "Generating formal acknowledgment receipt for SSP26E55443...",
+          "tool_call": "get_acknowledgment",
+          "tool_args": {
+            "application_no": "SSP26E55443"
+          },
+          "tool_result": {
+            "found": true,
+            "application_no": "SSP26E55443",
+            "applicant_name": "Prabin Chetia",
+            "mobile": "9864055443",
+            "dob": "02/08/1958",
+            "village": "Khelua Gaon",
+            "block": "Khelua",
+            "bank_account_masked": "XXXXXXX4567",
+            "ifsc": "SBIN0005678",
+            "submitted_at": "2026-10-07T10:02:14",
+            "status": "PENDING",
+            "acknowledgment_pdf_url": "http://localhost:8000/ack/100053.pdf"
+          }
+        }
+      ]
+    },
+    {
+      "id": "persona-6-officer",
+      "role": "officer",
+      "name": "BDO H. Barman",
+      "designation": "Block Development Officer (Sonari & Borgaon)",
+      "block": "Sonari",
+      "avatar": "\ud83d\udc6e",
+      "background": "Senior departmental officer reviewing daily pension queues, inspecting SLA breaches, and adjudicating eligible applications with official verification remarks.",
+      "intent": "Inspect dashboard metrics, review pending Sonari block applications, inspect applicant dossier, and execute statutory approval.",
+      "dialogue_prompt": "Log in as Block Officer, check dashboard statistics, show pending applications in Sonari block, and approve the verified case.",
+      "expected_db_state": "Target pending application transitioned to 'APPROVED', decided_by set to officer, and audit_log record added.",
+      "passed": true,
+      "duration_seconds": 0.24,
+      "assertions": [
+        {
+          "description": "Application transitioned to 'APPROVED' with decided_by stamped as 'admin'",
+          "sql": "SELECT status, decided_by FROM applications WHERE id = 99365",
+          "expected": "status = 'APPROVED', decided_by = 'admin'",
+          "actual": "status = 'APPROVED', decided_by = 'admin'",
+          "passed": true
+        },
+        {
+          "description": "Officer verification note stamped immutably in statutory audit log",
+          "sql": "SELECT action, actor, note FROM audit_log WHERE application_id = 99365 AND action = 'APPROVED'",
+          "expected": "action = 'APPROVED', note contains 'Physical document and village ...'",
+          "actual": "action = 'APPROVED', note = 'Physical document and village revenue record verified by BDO Sonari.'",
+          "passed": true
+        }
+      ],
+      "conversation_logs": [
+        {
+          "sender": "officer",
+          "message": "Log in as Block Officer, check dashboard statistics, show pending applications in Sonari block, and approve the verified case."
+        },
+        {
+          "sender": "assistant",
+          "message": "Retrieving statewide operational metrics and SLA breach summary...",
+          "tool_call": "get_admin_dashboard_stats",
+          "tool_args": {},
+          "tool_result": {
+            "total_applications": 100007,
+            "status_breakdown": {
+              "APPROVED": 82910,
+              "DEEMED_APPROVED": 9000,
+              "PENDING": 694,
+              "REJECTED": 7000,
+              "WITHDRAWN": 403
+            },
+            "pending_count": 694,
+            "approved_count": 82910,
+            "deemed_approved_count": 9000,
+            "rejected_count": 7000,
+            "withdrawn_count": 403,
+            "overdue_sla_pending_count": 691,
+            "statutory_sla_days": 15,
+            "pending_by_block": [
+              {
+                "block": "Dhemaji Pathar",
+                "pending_count": 124
+              },
+              {
+                "block": "Khelua",
+                "pending_count": 124
+              },
+              {
+                "block": "Rajapara",
+                "pending_count": 124
+              },
+              {
+                "block": "Sonari",
+                "pending_count": 116
+              },
+              {
+                "block": "Namti",
+                "pending_count": 111
+              },
+              {
+                "block": "Borgaon",
+                "pending_count": 95
+              }
+            ]
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "Filtering pending review queue for Block Sonari...",
+          "tool_call": "list_applications",
+          "tool_args": {
+            "status": "PENDING",
+            "block": "Sonari",
+            "limit": 5
+          },
+          "tool_result": {
+            "filter": {
+              "status": "PENDING",
+              "block": "Sonari",
+              "mobile": null
+            },
+            "total_matching": 116,
+            "limit": 5,
+            "offset": 0,
+            "applications": [
+              {
+                "id": 99524,
+                "application_no": "SSP26318401",
+                "applicant_name": "Pramila Bora",
+                "mobile": "9313885759",
+                "dob": "02/02/1947",
+                "village": "Kakotibari",
+                "block": "Sonari",
+                "status": "PENDING",
+                "submitted_at": "2026-09-16T09:44:00",
+                "days_pending": 31,
+                "is_sla_breach": true
+              },
+              {
+                "id": 99426,
+                "application_no": "SSP26231701",
+                "applicant_name": "Hemoprova Talukdar",
+                "mobile": "8866801975",
+                "dob": "22/01/1945",
+                "village": "Namdang",
+                "block": "Sonari",
+                "status": "PENDING",
+                "submitted_at": "2026-09-16T10:27:00",
+                "days_pending": 30,
+                "is_sla_breach": true
+              },
+              {
+                "id": 99432,
+                "application_no": "SSP26295748",
+                "applicant_name": "Pramila Hazarika",
+                "mobile": "6923080542",
+                "dob": "08/09/1950",
+                "village": "Namdang",
+                "block": "Sonari",
+                "status": "PENDING",
+                "submitted_at": "2026-09-16T11:00:00",
+                "days_pending": 30,
+                "is_sla_breach": true
+              },
+              {
+                "id": 99587,
+                "application_no": "SSP26078470",
+                "applicant_name": "Sarat Ahmed",
+                "mobile": "9929350173",
+                "dob": "15/12/1956",
+                "village": "Namdang",
+                "block": "Sonari",
+                "status": "PENDING",
+                "submitted_at": "2026-09-16T11:14:00",
+                "days_pending": 30,
+                "is_sla_breach": true
+              },
+              {
+                "id": 99366,
+                "application_no": "SSP26017106",
+                "applicant_name": "Tileswari Das",
+                "mobile": "7090466292",
+                "dob": "02/04/1944",
+                "village": "Bhekulajan",
+                "block": "Sonari",
+                "status": "PENDING",
+                "submitted_at": "2026-09-16T11:35:00",
+                "days_pending": 30,
+                "is_sla_breach": true
+              }
+            ]
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "Inspecting complete dossier and audit history for SSP26637135...",
+          "tool_call": "get_application_details",
+          "tool_args": {
+            "application_no": "SSP26637135"
+          },
+          "tool_result": {
+            "found": true,
+            "id": 99365,
+            "application_no": "SSP26637135",
+            "applicant_name": "Haren Ahmed",
+            "mobile": "8775963414",
+            "dob": "27/09/1939",
+            "gender": "Male",
+            "marital_status": "Unmarried",
+            "husband_name": "",
+            "village": "Lakhipur",
+            "block": "Sonari",
+            "bank_account": "384151964788",
+            "ifsc": "PUNB0556610",
+            "doc_path": "",
+            "status": "PENDING",
+            "submitted_at": "2026-09-27T14:06:00",
+            "decided_at": null,
+            "decided_by": null,
+            "days_elapsed": 19,
+            "is_sla_overdue": true,
+            "audit_trail": [
+              {
+                "timestamp": "2026-09-27T14:06:00",
+                "action": "SUBMIT",
+                "actor": "applicant:8775963414",
+                "note": ""
+              }
+            ]
+          }
+        },
+        {
+          "sender": "assistant",
+          "message": "Recording statutory approval for application SSP26637135...",
+          "tool_call": "approve_pension_application",
+          "tool_args": {
+            "application_no": "SSP26637135",
+            "note": "Physical document and village revenue record verified by BDO Sonari."
+          },
+          "tool_result": {
+            "success": true,
+            "application_id": 99365,
+            "application_no": "SSP26637135",
+            "status": "APPROVED",
+            "decided_by": "admin",
+            "decided_at": "2026-10-17T10:02:15",
+            "note": "Physical document and village revenue record verified by BDO Sonari.",
+            "message": "Application SSP26637135 has been APPROVED successfully. SMS notification sent to 8775963414."
+          }
+        }
+      ]
+    }
+  ]
+}

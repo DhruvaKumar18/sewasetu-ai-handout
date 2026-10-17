@@ -15,6 +15,7 @@ import os
 import io
 import re
 import random
+import secrets
 import hashlib
 import configparser
 from datetime import datetime, date, timedelta
@@ -446,30 +447,110 @@ def generate_acknowledgment(cur, app_id):
 
 @app.route("/status", methods=["GET", "POST"])
 def status_login():
+    if request.args.get("change_mobile") or request.args.get("reset"):
+        session.pop("status_otp_sent", None)
+        session.pop("status_otp_mobile", None)
+        return redirect(url_for("status_login"))
+
+    otp_sent = session.get("status_otp_sent", False)
+    otp_mobile = session.get("status_otp_mobile", "")
+    active_tab = "otp"
+
     if request.method == "POST":
-        mobile = request.form.get("mobile", "").strip()
-        password = request.form.get("password", "")
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT password_hash FROM portal_users WHERE mobile = %s", (mobile,))
-        row = cur.fetchone()
-        cur.close(); conn.close()
-        if row and row[0] == hash_password(password):
-            session["logged_in"] = True
-            session["portal_mobile"] = mobile
+        action = request.form.get("action", "")
+        mobile = request.form.get("mobile", "").strip() or otp_mobile
+
+        if action == "change_mobile":
+            session.pop("status_otp_sent", None)
+            session.pop("status_otp_mobile", None)
+            return redirect(url_for("status_login"))
+
+        # --- A. Send OTP for Citizen Status Login ---
+        if action == "send_otp":
+            active_tab = "otp"
+            if not mobile or len(mobile) != 10 or not mobile.isdigit():
+                flash("Please enter a valid 10-digit mobile number to receive an OTP.")
+                return render_template("status_login.html", otp_sent=False, mobile=mobile, active_tab="otp")
+
+            code = "%06d" % secrets.randbelow(1000000)
             conn = get_db()
             cur = conn.cursor()
-            cur.execute("SELECT id FROM applications WHERE mobile = %s "
-                        "ORDER BY submitted_at DESC LIMIT 1", (mobile,))
-            r = cur.fetchone()
+            cur.execute("INSERT INTO otps (mobile, code, created_at) VALUES (%s, %s, %s)",
+                        (mobile, code, datetime.now()))
+            conn.commit()
             cur.close(); conn.close()
-            if r:
-                return redirect(url_for("view_application", app_id=r[0]))
-            flash("No application found for this mobile number.")
-            return redirect(url_for("status_login"))
-        flash("Mobile number or password is incorrect. The password is your date of "
-              "birth as DDMMYYYY.")
-    return render_template("status_login.html")
+
+            send_sms(mobile, f"Your Sewa Setu status login OTP is {code}. Valid for 5 minutes.")
+            session["status_otp_sent"] = True
+            session["status_otp_mobile"] = mobile
+            flash(f"Verification code sent to {mobile}. Please enter the 6-digit OTP below.")
+            return render_template("status_login.html", otp_sent=True, mobile=mobile, active_tab="otp")
+
+        # --- B. Verify OTP and Log In ---
+        elif action == "verify_otp" or request.form.get("otp"):
+            active_tab = "otp"
+            code = request.form.get("otp", "").strip()
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("SELECT code, created_at FROM otps WHERE mobile = %s "
+                        "ORDER BY id DESC LIMIT 1", (mobile,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+
+            if row and secrets.compare_digest(row[0], code):
+                elapsed = (datetime.now() - row[1]).total_seconds()
+                if elapsed > OTP_VALIDITY_SECONDS:
+                    flash("OTP has expired. Please request a new OTP.")
+                    return render_template("status_login.html", otp_sent=False, mobile=mobile, active_tab="otp")
+
+                # Citizen authenticated via OTP!
+                session.pop("status_otp_sent", None)
+                session.pop("status_otp_mobile", None)
+                session["logged_in"] = True
+                session["portal_mobile"] = mobile
+
+                conn = get_db()
+                cur = conn.cursor()
+                cur.execute("SELECT id FROM applications WHERE mobile = %s "
+                            "ORDER BY submitted_at DESC LIMIT 1", (mobile,))
+                r = cur.fetchone()
+                cur.close(); conn.close()
+
+                if r:
+                    flash("Mobile verified successfully via OTP.")
+                    return redirect(url_for("view_application", app_id=r[0]))
+                flash("Mobile verified via OTP, but no application found. You may submit a new application.")
+                return redirect(url_for("apply"))
+
+            flash("Invalid OTP code. Please enter the correct 6-digit code.")
+            return render_template("status_login.html", otp_sent=True, mobile=mobile, active_tab="otp")
+
+        # --- C. Password Login (DOB as DDMMYYYY) ---
+        elif action == "password_login" or request.form.get("password"):
+            active_tab = "password"
+            password = request.form.get("password", "")
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("SELECT password_hash FROM portal_users WHERE mobile = %s", (mobile,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row and row[0] == hash_password(password):
+                session["logged_in"] = True
+                session["portal_mobile"] = mobile
+                conn = get_db()
+                cur = conn.cursor()
+                cur.execute("SELECT id FROM applications WHERE mobile = %s "
+                            "ORDER BY submitted_at DESC LIMIT 1", (mobile,))
+                r = cur.fetchone()
+                cur.close(); conn.close()
+                if r:
+                    return redirect(url_for("view_application", app_id=r[0]))
+                flash("No application found for this mobile number.")
+                return redirect(url_for("status_login"))
+            flash("Mobile number or password is incorrect. The password is your date of birth as DDMMYYYY.")
+            return render_template("status_login.html", otp_sent=False, mobile=mobile, active_tab="password")
+
+    return render_template("status_login.html", otp_sent=otp_sent, mobile=otp_mobile, active_tab=active_tab)
 
 
 @app.route("/application/<int:app_id>")
@@ -682,6 +763,9 @@ app.register_blueprint(_mcp_citizen_blueprint)
 
 from mcp_admin import mcp_admin as _mcp_admin_blueprint  # noqa: E402
 app.register_blueprint(_mcp_admin_blueprint)
+
+from evals import evals_bp as _evals_blueprint  # noqa: E402
+app.register_blueprint(_evals_blueprint)
 
 
 if __name__ == "__main__":

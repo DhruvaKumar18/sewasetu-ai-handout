@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Sewa Setu — Old Age Pension Portal
 
 Department of Social Welfare, Government of Purvanchal. Maintained in-house.
@@ -10,6 +9,9 @@ ADMIN_PASSWORD=pick-something docker compose up --build
 ```
 
 - Portal: http://localhost:8000
+- Evaluation Dashboard: http://localhost:8000/eval-dashboard
+- Citizen MCP Server: http://localhost:8000/mcp/citizen (SSE: http://localhost:8000/mcp/citizen/sse)
+- Block Officer MCP Server: http://localhost:8000/mcp/admin (SSE: http://localhost:8000/mcp/admin/sse)
 - Status portal: http://localhost:8000/status (mobile number + password; the
   password is the applicant's date of birth as DDMMYYYY)
 - Departmental login: http://localhost:8000/admin (user `admin`, password from
@@ -82,7 +84,7 @@ portal, checks `aud` is its own canonical URL, and reads `scope`, `role` and `su
 
 Long-lived **program tokens** for unattended use (role officer) are issued by an
 administrator at `/admin/tokens`.
-=======
-# sewasetu-ai-handout
-The Build for Bharat fellowship aims to identify and train early-career public-interest technologists who can strengthen, modernize and humanize the digital technologies used to address India’s most urgent public and governance challenges.
->>>>>>> 0a6ac5aca6030644c6fa64b10777ee8eecbe5ebe
+
+---
+*The Build for Bharat fellowship aims to identify and train early-career public-interest technologists who can strengthen, modernize and humanize the digital technologies used to address India’s most urgent public and governance challenges.*
+

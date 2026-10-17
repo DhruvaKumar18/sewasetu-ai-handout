@@ -36,6 +36,7 @@ if (-not $smsgwRunning) {
 Write-Host "`nAll background services are ready!" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "  Portal URL:            http://localhost:8000" -ForegroundColor White
+Write-Host "  Evaluation Dashboard:  http://localhost:8000/eval-dashboard" -ForegroundColor Green
 Write-Host "  Admin Dashboard:       http://localhost:8000/admin (user: admin / pass: $env:ADMIN_PASSWORD)" -ForegroundColor White
 Write-Host "  Citizen MCP (HTTP):    http://localhost:8000/mcp/citizen" -ForegroundColor Green
 Write-Host "  Citizen MCP (SSE):     http://localhost:8000/mcp/citizen/sse" -ForegroundColor Green

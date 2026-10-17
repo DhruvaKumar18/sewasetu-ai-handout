@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Sewa Setu - Admin / Block Officer MCP Server
+Sewa Setu - Admin / Block Officer MCP Server (Official MCP SDK Implementation)
 Department of Social Welfare, Government of Purvanchal
 
-Exposes an MCP (Model Context Protocol) endpoint over Streamable HTTP and SSE
-specifically for Departmental Block Officers and Administrators.
+Exposes a Model Context Protocol (MCP) server over Streamable HTTP and SSE
+specifically for Departmental Block Officers and Administrators, powered by
+the official Python MCP SDK (mcp.server.mcpserver).
 
-Strict separation: ONLY departmental officer tools are exposed here.
+Strict separation: ONLY departmental officer tools are exposed here
 (dashboard metrics, queue inspection, approving, rejecting, deemed approval audit).
 
 Authentication:
@@ -20,10 +21,17 @@ import time
 import queue
 import secrets
 import threading
+import asyncio
+import contextvars
 from datetime import datetime, timedelta
+from typing import Optional, List, Dict, Any
 
 import jwt
 from flask import Blueprint, request, jsonify, Response
+from pydantic import Field
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
+from mcp.types import Tool, TextContent, CallToolResult
 
 import app as portal
 from oauth import ISSUER, signing_key
@@ -31,17 +39,34 @@ from oauth import ISSUER, signing_key
 mcp_admin = Blueprint("mcp_admin", __name__)
 
 # Active SSE sessions: session_id -> queue.Queue
-_SSE_ADMIN_SESSIONS = {}
+_SSE_ADMIN_SESSIONS: Dict[str, Dict[str, Any]] = {}
 _SSE_ADMIN_LOCK = threading.Lock()
 
 DEFAULT_ADMIN_TOKEN = os.environ.get("ADMIN_BEARER_TOKEN", "sewasetu-admin-token-2026")
+
+# ContextVar to pass authenticated admin actor safely to tool execution
+CURRENT_ADMIN_ACTOR: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "CURRENT_ADMIN_ACTOR", default=None
+)
+
+# Initialize official MCP SDK Server instance for Admin
+admin_mcp = MCPServer(
+    name="sewasetu-admin-mcp",
+    instructions=(
+        "You are the Departmental Block Officer Assistant for Sewa Setu Old Age Pension Portal. "
+        "You inspect application queues, review applicant dossiers, verify eligibility, "
+        "record approval/rejection decisions with statutory remarks, and oversee SLA compliance. "
+        "Always adhere to the statutory guidelines under the Purvanchal Right to Public Services Act."
+    ),
+    version="1.0.0"
+)
 
 
 # ---------------------------------------------------------------------------
 # Authentication verification for Officer / Admin
 # ---------------------------------------------------------------------------
 
-def verify_admin_auth(req):
+def verify_admin_auth(req) -> Optional[str]:
     """
     Checks if the request is authorized as an Admin / Block Officer.
     Accepts:
@@ -65,13 +90,11 @@ def verify_admin_auth(req):
         "sewasetu-admin-token",
         portal.ADMIN_PASSWORD,
     }
-    # Filter out empty strings
     valid_tokens = {t for t in valid_tokens if t}
 
     if token and token in valid_tokens:
         return "admin"
 
-    # Verify RS256 JWT if provided
     if token:
         try:
             kid, priv = signing_key()
@@ -94,152 +117,18 @@ def verify_admin_auth(req):
 
 
 # ---------------------------------------------------------------------------
-# Admin / Officer Tools Definitions (MCP Tool Schema)
+# Admin / Officer Tools Definitions (Registered with official MCP SDK)
 # ---------------------------------------------------------------------------
 
-ADMIN_TOOLS = [
-    {
-        "name": "get_admin_dashboard_stats",
-        "description": (
-            "Retrieve operational statistics for the Old Age Pension scheme: "
-            "counts of applications by status (PENDING, APPROVED, REJECTED, DEEMED_APPROVED, WITHDRAWN), "
-            "count of SLA overdue applications pending beyond 15 days, and pending counts broken down by block."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "list_applications",
-        "description": (
-            "List and filter applications in the pension queue by status, block, or mobile number. "
-            "Supports pagination with limit and offset."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "description": "Filter by status: PENDING, APPROVED, REJECTED, DEEMED_APPROVED, WITHDRAWN, or ALL",
-                    "default": "PENDING"
-                },
-                "block": {
-                    "type": "string",
-                    "description": "Filter by block name (e.g. Sonari, Rajapara, Dhemaji Pathar, Borgaon, Namti, Khelua)"
-                },
-                "mobile": {
-                    "type": "string",
-                    "description": "Filter by 10-digit applicant mobile number"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Number of records to return (default 20, max 100)",
-                    "default": 20
-                },
-                "offset": {
-                    "type": "integer",
-                    "description": "Number of records to skip (default 0)",
-                    "default": 0
-                }
-            },
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "get_application_details",
-        "description": (
-            "Retrieve the complete application dossier for a citizen, including personal details, "
-            "address, bank account, document path, decision record, and chronological audit trail."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "application_no": {
-                    "type": "string",
-                    "description": "Application number (e.g. SSP26123456)"
-                },
-                "application_id": {
-                    "type": "integer",
-                    "description": "Internal database application ID"
-                }
-            },
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "approve_pension_application",
-        "description": (
-            "Approve a PENDING pension application. Records the approval decision, timestamp, "
-            "and optional verification note into the official audit log, and notifies the applicant via SMS."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "application_no": {
-                    "type": "string",
-                    "description": "Application number to approve (e.g. SSP26123456)"
-                },
-                "application_id": {
-                    "type": "integer",
-                    "description": "Internal database application ID (alternative to application_no)"
-                },
-                "note": {
-                    "type": "string",
-                    "description": "Verification notes or remarks from the reviewing officer"
-                }
-            },
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "reject_pension_application",
-        "description": (
-            "Reject a PENDING pension application with an official statutory reason. "
-            "Records the decision into the audit log and notifies the applicant via SMS."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "application_no": {
-                    "type": "string",
-                    "description": "Application number to reject (e.g. SSP26123456)"
-                },
-                "application_id": {
-                    "type": "integer",
-                    "description": "Internal database application ID (alternative to application_no)"
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "Specific statutory reason for rejecting the application"
-                }
-            },
-            "required": ["reason"],
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "trigger_deemed_approval",
-        "description": (
-            "Execute the statutory deemed-approval process under the Purvanchal Right to Public Services Act. "
-            "Any application pending beyond 15 days is transitioned to DEEMED_APPROVED, logged in the audit trail, "
-            "and the applicant is notified."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False
-        }
-    }
-]
-
-
-# ---------------------------------------------------------------------------
-# Admin Tool Handlers
-# ---------------------------------------------------------------------------
-
-def execute_get_admin_dashboard_stats(args, actor):
+@admin_mcp.tool(
+    name="get_admin_dashboard_stats",
+    description=(
+        "Retrieve operational statistics for the Old Age Pension scheme: "
+        "counts of applications by status (PENDING, APPROVED, REJECTED, DEEMED_APPROVED, WITHDRAWN), "
+        "count of SLA overdue applications pending beyond 15 days, and pending counts broken down by block."
+    )
+)
+def get_admin_dashboard_stats() -> dict:
     conn = portal.get_db()
     cur = conn.cursor()
 
@@ -272,12 +161,25 @@ def execute_get_admin_dashboard_stats(args, actor):
     }
 
 
-def execute_list_applications(args, actor):
-    status = (args.get("status") or "PENDING").upper()
-    block = (args.get("block") or "").strip()
-    mobile = (args.get("mobile") or "").strip()
-    limit = max(1, min(int(args.get("limit") or 20), 100))
-    offset = max(0, int(args.get("offset") or 0))
+@admin_mcp.tool(
+    name="list_applications",
+    description=(
+        "List and filter applications in the pension queue by status, block, or mobile number. "
+        "Supports pagination with limit and offset."
+    )
+)
+def list_applications(
+    status: Optional[str] = Field("PENDING", description="Filter by status: PENDING, APPROVED, REJECTED, DEEMED_APPROVED, WITHDRAWN, or ALL"),
+    block: Optional[str] = Field(None, description="Filter by block name (e.g. Sonari, Rajapara, Dhemaji Pathar, Borgaon, Namti, Khelua)"),
+    mobile: Optional[str] = Field(None, description="Filter by 10-digit applicant mobile number"),
+    limit: Optional[int] = Field(20, description="Number of records to return (default 20, max 100)"),
+    offset: Optional[int] = Field(0, description="Number of records to skip (default 0)")
+) -> dict:
+    status_filter = (status or "PENDING").upper()
+    block_filter = (block or "").strip()
+    mobile_filter = (mobile or "").strip()
+    eff_limit = max(1, min(int(limit or 20), 100))
+    eff_offset = max(0, int(offset or 0))
 
     conn = portal.get_db()
     cur = conn.cursor()
@@ -285,15 +187,15 @@ def execute_list_applications(args, actor):
     conditions = []
     params = []
 
-    if status != "ALL":
+    if status_filter != "ALL":
         conditions.append("status = %s")
-        params.append(status)
-    if block:
+        params.append(status_filter)
+    if block_filter:
         conditions.append("block = %s")
-        params.append(block)
-    if mobile:
+        params.append(block_filter)
+    if mobile_filter:
         conditions.append("mobile = %s")
-        params.append(mobile)
+        params.append(mobile_filter)
 
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
 
@@ -308,7 +210,7 @@ def execute_list_applications(args, actor):
         ORDER BY submitted_at ASC
         LIMIT %s OFFSET %s
     """
-    cur.execute(select_query, params + [limit, offset])
+    cur.execute(select_query, params + [eff_limit, eff_offset])
     rows = cur.fetchall()
     cur.close(); conn.close()
 
@@ -332,17 +234,27 @@ def execute_list_applications(args, actor):
         })
 
     return {
-        "filter": {"status": status, "block": block or None, "mobile": mobile or None},
+        "filter": {"status": status_filter, "block": block_filter or None, "mobile": mobile_filter or None},
         "total_matching": total_matching,
-        "limit": limit,
-        "offset": offset,
+        "limit": eff_limit,
+        "offset": eff_offset,
         "applications": applications
     }
 
 
-def execute_get_application_details(args, actor):
-    app_no = (args.get("application_no") or "").strip()
-    app_id = args.get("application_id")
+@admin_mcp.tool(
+    name="get_application_details",
+    description=(
+        "Retrieve the complete application dossier for a citizen, including personal details, "
+        "address, bank account, document path, decision record, and chronological audit trail."
+    )
+)
+def get_application_details(
+    application_no: Optional[str] = Field(None, description="Application number (e.g. SSP26123456)"),
+    application_id: Optional[int] = Field(None, description="Internal database application ID")
+) -> dict:
+    app_no = (application_no or "").strip()
+    app_id = application_id
 
     if not app_no and not app_id:
         return {"found": False, "message": "Either application_no or application_id is required."}
@@ -418,11 +330,22 @@ def execute_get_application_details(args, actor):
     }
 
 
-def execute_approve_pension_application(args, actor):
-    app_no = (args.get("application_no") or "").strip()
-    app_id = args.get("application_id")
-    note = (args.get("note") or "Approved by Block Officer via MCP").strip()
-    deciding_officer = actor or "admin"
+@admin_mcp.tool(
+    name="approve_pension_application",
+    description=(
+        "Approve a PENDING pension application. Records the approval decision, timestamp, "
+        "and optional verification note into the official audit log, and notifies the applicant via SMS."
+    )
+)
+def approve_pension_application(
+    application_no: Optional[str] = Field(None, description="Application number to approve (e.g. SSP26123456)"),
+    application_id: Optional[int] = Field(None, description="Internal database application ID (alternative to application_no)"),
+    note: Optional[str] = Field("", description="Verification notes or remarks from the reviewing officer")
+) -> dict:
+    app_no = (application_no or "").strip()
+    app_id = application_id
+    eff_note = (note or "Approved by Block Officer via MCP").strip()
+    deciding_officer = CURRENT_ADMIN_ACTOR.get() or "admin"
 
     conn = portal.get_db()
     cur = conn.cursor()
@@ -456,7 +379,7 @@ def execute_approve_pension_application(args, actor):
         }
 
     target_id, target_no, target_mobile = row
-    portal.write_audit(cur, target_id, "APPROVED", f"officer:{deciding_officer}", note)
+    portal.write_audit(cur, target_id, "APPROVED", f"officer:{deciding_officer}", eff_note)
     conn.commit()
     cur.close(); conn.close()
 
@@ -472,16 +395,27 @@ def execute_approve_pension_application(args, actor):
         "status": "APPROVED",
         "decided_by": deciding_officer,
         "decided_at": datetime.now().isoformat(timespec="seconds"),
-        "note": note,
+        "note": eff_note,
         "message": f"Application {target_no} has been APPROVED successfully. SMS notification sent to {target_mobile}."
     }
 
 
-def execute_reject_pension_application(args, actor):
-    app_no = (args.get("application_no") or "").strip()
-    app_id = args.get("application_id")
-    reason = (args.get("reason") or "Application rejected per verification criteria").strip()
-    deciding_officer = actor or "admin"
+@admin_mcp.tool(
+    name="reject_pension_application",
+    description=(
+        "Reject a PENDING pension application with an official statutory reason. "
+        "Records the decision into the audit log and notifies the applicant via SMS."
+    )
+)
+def reject_pension_application(
+    reason: str = Field(..., description="Specific statutory reason for rejecting the application"),
+    application_no: Optional[str] = Field(None, description="Application number to reject (e.g. SSP26123456)"),
+    application_id: Optional[int] = Field(None, description="Internal database application ID (alternative to application_no)")
+) -> dict:
+    app_no = (application_no or "").strip()
+    app_id = application_id
+    eff_reason = (reason or "Application rejected per verification criteria").strip()
+    deciding_officer = CURRENT_ADMIN_ACTOR.get() or "admin"
 
     conn = portal.get_db()
     cur = conn.cursor()
@@ -515,13 +449,13 @@ def execute_reject_pension_application(args, actor):
         }
 
     target_id, target_no, target_mobile = row
-    portal.write_audit(cur, target_id, "REJECTED", f"officer:{deciding_officer}", reason)
+    portal.write_audit(cur, target_id, "REJECTED", f"officer:{deciding_officer}", eff_reason)
     conn.commit()
     cur.close(); conn.close()
 
     portal.send_sms(
         target_mobile,
-        f"Sewa Setu: Your pension application {target_no} was not approved. Reason: {reason}."
+        f"Sewa Setu: Your pension application {target_no} was not approved. Reason: {eff_reason}."
     )
 
     return {
@@ -531,12 +465,20 @@ def execute_reject_pension_application(args, actor):
         "status": "REJECTED",
         "decided_by": deciding_officer,
         "decided_at": datetime.now().isoformat(timespec="seconds"),
-        "reason": reason,
-        "message": f"Application {target_no} was REJECTED. Reason recorded: '{reason}'. SMS notification sent to applicant."
+        "reason": eff_reason,
+        "message": f"Application {target_no} was REJECTED. Reason recorded: '{eff_reason}'. SMS notification sent to applicant."
     }
 
 
-def execute_trigger_deemed_approval(args, actor):
+@admin_mcp.tool(
+    name="trigger_deemed_approval",
+    description=(
+        "Execute the statutory deemed-approval process under the Purvanchal Right to Public Services Act. "
+        "Any application pending beyond 15 days is transitioned to DEEMED_APPROVED, logged in the audit trail, "
+        "and the applicant is notified."
+    )
+)
+def trigger_deemed_approval() -> dict:
     conn = portal.get_db()
     cur = conn.cursor()
     cutoff = datetime.now() - timedelta(days=portal.SLA_DAYS)
@@ -576,21 +518,30 @@ def execute_trigger_deemed_approval(args, actor):
     }
 
 
-ADMIN_TOOL_HANDLERS = {
-    "get_admin_dashboard_stats": execute_get_admin_dashboard_stats,
-    "list_applications": execute_list_applications,
-    "get_application_details": execute_get_application_details,
-    "approve_pension_application": execute_approve_pension_application,
-    "reject_pension_application": execute_reject_pension_application,
-    "trigger_deemed_approval": execute_trigger_deemed_approval,
-}
+def _get_admin_sdk_tools_schema() -> List[Dict[str, Any]]:
+    """Helper to retrieve JSON schema for all registered admin tools from the MCP SDK."""
+    tools = asyncio.run(admin_mcp.list_tools())
+    res = []
+    for t in tools:
+        schema = t.input_schema if hasattr(t, "input_schema") else {"type": "object", "properties": {}}
+        res.append({
+            "name": t.name,
+            "description": t.description or "",
+            "inputSchema": schema,
+            "input_schema": schema
+        })
+    return res
+
+
+# Cached/dynamic tool definition list for backwards-compatibility
+ADMIN_TOOLS = _get_admin_sdk_tools_schema()
 
 
 # ---------------------------------------------------------------------------
-# Admin JSON-RPC 2.0 Dispatcher
+# Admin JSON-RPC 2.0 Dispatcher (MCP 2024-11-05 Specification)
 # ---------------------------------------------------------------------------
 
-def handle_admin_jsonrpc_request(req_data, actor):
+def handle_admin_jsonrpc_request(req_data: Any, actor: Optional[str]) -> Optional[Dict[str, Any]]:
     if not isinstance(req_data, dict):
         return {
             "jsonrpc": "2.0",
@@ -603,6 +554,7 @@ def handle_admin_jsonrpc_request(req_data, actor):
     params = req_data.get("params") or {}
     is_notification = "id" not in req_data
 
+    # 1. Connection Handshake
     if method == "initialize":
         result = {
             "protocolVersion": "2024-11-05",
@@ -632,23 +584,21 @@ def handle_admin_jsonrpc_request(req_data, actor):
     elif method == "ping":
         return {"jsonrpc": "2.0", "id": req_id, "result": {}}
 
+    # 2. Tool Discovery
     elif method == "tools/list":
-        return {"jsonrpc": "2.0", "id": req_id, "result": {"tools": ADMIN_TOOLS}}
-
-    elif method == "tools/call":
-        tool_name = params.get("name")
-        args = params.get("arguments") or {}
-
-        if tool_name not in ADMIN_TOOL_HANDLERS:
-            return {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {"code": -32601, "message": f"Admin tool '{tool_name}' not found."}
+        tools = _get_admin_sdk_tools_schema()
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "tools": tools
             }
+        }
 
-        try:
-            handler = ADMIN_TOOL_HANDLERS[tool_name]
-            result_data = handler(args, actor)
+    # 3. Tool Execution & Input Validation via MCP SDK
+    elif method == "tools/call":
+        # Strict officer authentication check
+        if not actor:
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -656,10 +606,79 @@ def handle_admin_jsonrpc_request(req_data, actor):
                     "content": [
                         {
                             "type": "text",
-                            "text": json.dumps(result_data, indent=2)
+                            "text": (
+                                "Authentication Required: Access to Block Officer tools requires a valid "
+                                "Bearer token in the Authorization header (e.g. 'Authorization: Bearer sewasetu-admin-token-2026') "
+                                "or the officer access token."
+                            )
                         }
                     ],
-                    "isError": False
+                    "isError": True
+                }
+            }
+
+        tool_name = params.get("name")
+        args = params.get("arguments")
+        if args is None:
+            args = {}
+        elif not isinstance(args, dict):
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32602, "message": "Invalid params: 'arguments' must be an object"}
+            }
+
+        cv_token = CURRENT_ADMIN_ACTOR.set(actor)
+        try:
+            call_res = asyncio.run(admin_mcp.call_tool(tool_name, args))
+            content_list = []
+            for c in getattr(call_res, "content", []):
+                content_list.append({
+                    "type": getattr(c, "type", "text"),
+                    "text": getattr(c, "text", str(c))
+                })
+
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": content_list,
+                    "isError": getattr(call_res, "is_error", False)
+                }
+            }
+        except ToolError as te:
+            err_msg = str(te)
+            if "Unknown tool:" in err_msg:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32601, "message": f"Admin tool '{tool_name}' not found."}
+                }
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Input validation error: {err_msg}"
+                        }
+                    ],
+                    "isError": True
+                }
+            }
+        except UnexpectedToolError as ute:
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Execution error in admin tool '{tool_name}': {str(ute)}"
+                        }
+                    ],
+                    "isError": True
                 }
             }
         except Exception as e:
@@ -670,12 +689,14 @@ def handle_admin_jsonrpc_request(req_data, actor):
                     "content": [
                         {
                             "type": "text",
-                            "text": f"Error executing admin tool '{tool_name}': {str(e)}"
+                            "text": f"Unexpected error executing admin tool '{tool_name}': {str(e)}"
                         }
                     ],
                     "isError": True
                 }
             }
+        finally:
+            CURRENT_ADMIN_ACTOR.reset(cv_token)
 
     else:
         if is_notification:
@@ -696,6 +717,7 @@ def _admin_cors_headers(resp):
     resp.headers["Access-Control-Allow-Origin"] = "*"
     resp.headers["Access-Control-Allow-Headers"] = "*"
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    resp.headers["Access-Control-Expose-Headers"] = "Mcp-Session-Id"
     return resp
 
 
@@ -720,10 +742,14 @@ def mcp_admin_streamable_http():
         if "text/event-stream" in accept or request.args.get("sse"):
             return sse_admin_connect(actor)
 
+        tools = _get_admin_sdk_tools_schema()
         return jsonify({
             "service": "Sewa Setu Block Officer / Admin MCP Server",
             "version": "1.0.0",
             "status": "ready",
+            "protocol": "Model Context Protocol (MCP)",
+            "protocol_version": "2024-11-05",
+            "sdk": "mcp.server.mcpserver (Official Python MCP SDK)",
             "authenticated": actor is not None,
             "authenticated_as": f"officer:{actor}" if actor else "unauthenticated",
             "transports": {
@@ -731,7 +757,7 @@ def mcp_admin_streamable_http():
                 "sse": f"{ISSUER}/mcp/admin/sse",
                 "messages": f"{ISSUER}/mcp/admin/messages"
             },
-            "tools_count": len(ADMIN_TOOLS),
+            "tools_count": len(tools),
             "auth_guidance": "Pass 'Authorization: Bearer <admin-token>' (default token: sewasetu-admin-token-2026 or portal admin password)"
         })
 
@@ -744,15 +770,23 @@ def mcp_admin_streamable_http():
             "error": {"code": -32700, "message": "Parse error: invalid JSON"}
         }), 400
 
+    session_id = request.headers.get("Mcp-Session-Id") or secrets.token_hex(16)
+
     if isinstance(body, list):
         responses = [handle_admin_jsonrpc_request(item, actor) for item in body]
         valid_responses = [r for r in responses if r is not None]
-        return jsonify(valid_responses)
+        resp = jsonify(valid_responses)
+        resp.headers["Mcp-Session-Id"] = session_id
+        return resp
     else:
-        resp = handle_admin_jsonrpc_request(body, actor)
-        if resp is None:
-            return ("", 204)
-        return jsonify(resp)
+        rpc_resp = handle_admin_jsonrpc_request(body, actor)
+        if rpc_resp is None:
+            res = Response("", status=204)
+            res.headers["Mcp-Session-Id"] = session_id
+            return res
+        resp = jsonify(rpc_resp)
+        resp.headers["Mcp-Session-Id"] = session_id
+        return resp
 
 
 @mcp_admin.route("/mcp/admin/sse", methods=["GET"])
@@ -762,9 +796,9 @@ def mcp_admin_sse():
     return sse_admin_connect(actor)
 
 
-def sse_admin_connect(actor):
+def sse_admin_connect(actor: Optional[str]):
     session_id = secrets.token_hex(16)
-    q = queue.Queue()
+    q: queue.Queue = queue.Queue()
 
     with _SSE_ADMIN_LOCK:
         _SSE_ADMIN_SESSIONS[session_id] = {"queue": q, "actor": actor}
@@ -790,7 +824,8 @@ def sse_admin_connect(actor):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
+            "X-Accel-Buffering": "no",
+            "Mcp-Session-Id": session_id
         }
     )
 

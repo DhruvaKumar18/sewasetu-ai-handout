@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Sewa Setu - Citizen MCP Server (Public Endpoint)
+Sewa Setu - Citizen MCP Server (Official MCP SDK Implementation)
 Department of Social Welfare, Government of Purvanchal
 
-Exposes an MCP (Model Context Protocol) endpoint over Streamable HTTP and SSE
-for citizen assistance. The portal remains the system of record.
+Exposes a Model Context Protocol (MCP) server over Streamable HTTP and SSE
+for citizen assistance, powered by the official Python MCP SDK (mcp.server.mcpserver).
+The portal remains the system of record.
 
 Strict separation: ONLY citizen/applicant tools are exposed here.
 Officer tools (approval, rejection, block queues, SLA reports) are never visible.
@@ -24,27 +25,51 @@ import time
 import queue
 import secrets
 import threading
-from datetime import datetime
-from urllib.parse import urlparse
+import asyncio
+import contextvars
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict, Any
 
 import jwt
 from flask import Blueprint, request, jsonify, Response, current_app
+from pydantic import Field
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
+from mcp.types import Tool, TextContent, CallToolResult
 
 import app as portal
-from oauth import ISSUER, signing_key
+from oauth import ISSUER, signing_key, mint_access_token, SESSION
 
 mcp_citizen = Blueprint("mcp_citizen", __name__)
 
 # Active SSE sessions: session_id -> queue.Queue
-_SSE_SESSIONS = {}
+_SSE_SESSIONS: Dict[str, Dict[str, Any]] = {}
 _SSE_LOCK = threading.Lock()
+
+# ContextVar to pass authenticated citizen mobile safely across tool invocations
+CURRENT_AUTH_CITIZEN: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "CURRENT_AUTH_CITIZEN", default=None
+)
+
+# Initialize official MCP SDK Server instance
+citizen_mcp = MCPServer(
+    name="sewasetu-citizen-mcp",
+    instructions=(
+        "You are the Citizen Assistant for Sewa Setu Old Age Pension Scheme, Department "
+        "of Social Welfare, Purvanchal. You help senior citizens check eligibility (age 60+, "
+        "valid blocks), send and verify mobile OTPs, submit pension applications, track "
+        "status, and withdraw pending applications. Never invent rules; always call the "
+        "tools provided."
+    ),
+    version="1.0.0"
+)
 
 
 # ---------------------------------------------------------------------------
 # Token & Authentication verification
 # ---------------------------------------------------------------------------
 
-def get_authenticated_citizen(req):
+def get_authenticated_citizen(req) -> Optional[str]:
     """
     Returns the authenticated mobile number if a valid citizen Bearer token
     is supplied in the Authorization header or ?access_token query parameter.
@@ -90,214 +115,18 @@ def get_authenticated_citizen(req):
 
 
 # ---------------------------------------------------------------------------
-# Citizen Tools Definitions (MCP Tool Schema)
+# Citizen Tools Definitions (Registered with official MCP SDK)
 # ---------------------------------------------------------------------------
 
-CITIZEN_TOOLS = [
-    {
-        "name": "get_scheme_guidelines",
-        "description": (
-            "Get the official guidelines, eligibility criteria, required documents, "
-            "statutory SLA, and current application window status for the Sewa Setu "
-            "Old Age Pension Scheme in Purvanchal."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "check_eligibility",
-        "description": (
-            "Check if a senior citizen is eligible to apply for Old Age Pension based "
-            "on their Date of Birth (must be 60+ years) and Block."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "dob": {
-                    "type": "string",
-                    "description": "Date of birth in DD/MM/YYYY format (e.g. 15/08/1960)"
-                },
-                "block": {
-                    "type": "string",
-                    "description": "Block name (must be one of: Sonari, Rajapara, Dhemaji Pathar, Borgaon, Namti, Khelua)"
-                }
-            },
-            "required": ["dob", "block"],
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "send_citizen_otp",
-        "description": (
-            "Dispatch an SMS verification OTP to the citizen's 10-digit mobile number "
-            "via the Sewa Setu SMS gateway."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "mobile": {
-                    "type": "string",
-                    "description": "10-digit mobile phone number"
-                }
-            },
-            "required": ["mobile"],
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "verify_citizen_otp",
-        "description": "Verify the 6-digit OTP code received by the citizen on their phone.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "mobile": {
-                    "type": "string",
-                    "description": "10-digit mobile number"
-                },
-                "otp": {
-                    "type": "string",
-                    "description": "6-digit OTP code"
-                }
-            },
-            "required": ["mobile", "otp"],
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "submit_pension_application",
-        "description": (
-            "Submit a complete Old Age Pension application into the Sewa Setu portal. "
-            "Validates all scheme criteria (age >= 60, valid block, bank account, IFSC) "
-            "and creates a formal PENDING application record in the database."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "applicant_name": {
-                    "type": "string",
-                    "description": "Full name of the senior citizen applicant"
-                },
-                "dob": {
-                    "type": "string",
-                    "description": "Date of birth in DD/MM/YYYY format"
-                },
-                "gender": {
-                    "type": "string",
-                    "description": "Gender: Male, Female, or Other"
-                },
-                "village": {
-                    "type": "string",
-                    "description": "Village or locality name"
-                },
-                "block": {
-                    "type": "string",
-                    "description": "Block name: Sonari, Rajapara, Dhemaji Pathar, Borgaon, Namti, or Khelua"
-                },
-                "bank_account": {
-                    "type": "string",
-                    "description": "Bank account number (9 to 18 digits)"
-                },
-                "ifsc": {
-                    "type": "string",
-                    "description": "Bank IFSC code (11 characters, e.g. SBIN0003077)"
-                },
-                "mobile": {
-                    "type": "string",
-                    "description": "10-digit mobile number (required if not using authenticated session)"
-                },
-                "marital_status": {
-                    "type": "string",
-                    "description": "Marital status: Single, Married, Widowed, or Divorced"
-                },
-                "husband_name": {
-                    "type": "string",
-                    "description": "Husband's name if applicable"
-                },
-                "document_name": {
-                    "type": "string",
-                    "description": "Name or type of age proof document (e.g. aadhaar_card.pdf, voter_id.jpg)"
-                }
-            },
-            "required": ["applicant_name", "dob", "village", "block", "bank_account", "ifsc"],
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "get_application_status",
-        "description": (
-            "Check current status and decision details for a citizen's application "
-            "on the Sewa Setu portal (PENDING, APPROVED, DEEMED_APPROVED, REJECTED, or WITHDRAWN)."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "mobile": {
-                    "type": "string",
-                    "description": "10-digit mobile number of the applicant (optional if application_no provided)"
-                },
-                "application_no": {
-                    "type": "string",
-                    "description": "Official application number (e.g. SSP26123456) (optional if mobile provided)"
-                }
-            },
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "withdraw_pension_application",
-        "description": (
-            "Withdraw a PENDING application so the applicant can correct mistakes "
-            "and submit a fresh application."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "application_no": {
-                    "type": "string",
-                    "description": "Application number to withdraw"
-                },
-                "mobile": {
-                    "type": "string",
-                    "description": "10-digit mobile number (required for verification if unauthenticated)"
-                }
-            },
-            "required": ["application_no"],
-            "additionalProperties": False
-        }
-    },
-    {
-        "name": "get_acknowledgment",
-        "description": (
-            "Retrieve formal acknowledgment details and official receipt PDF link "
-            "for a submitted application."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "application_no": {
-                    "type": "string",
-                    "description": "Application number (e.g. SSP26123456)"
-                },
-                "mobile": {
-                    "type": "string",
-                    "description": "10-digit mobile number (optional if authenticated)"
-                }
-            },
-            "required": ["application_no"],
-            "additionalProperties": False
-        }
-    }
-]
-
-
-# ---------------------------------------------------------------------------
-# Tool Execution Handlers
-# ---------------------------------------------------------------------------
-
-def execute_get_scheme_guidelines(args, auth_mobile):
+@citizen_mcp.tool(
+    name="get_scheme_guidelines",
+    description=(
+        "Get the official guidelines, statutory eligibility criteria, required documents, "
+        "recognized blocks, application window status, and statutory SLA rules for the Sewa Setu "
+        "Old Age Pension Scheme (Department of Social Welfare, Purvanchal)."
+    )
+)
+def get_scheme_guidelines() -> dict:
     hours_left = portal.deadline_remaining()
     window_open = hours_left is not None and hours_left > 0
     return {
@@ -320,30 +149,40 @@ def execute_get_scheme_guidelines(args, auth_mobile):
     }
 
 
-def execute_check_eligibility(args, auth_mobile):
-    dob_raw = args.get("dob", "")
-    block_raw = (args.get("block") or "").strip()
-
-    dob = portal.parse_dob(dob_raw)
+@citizen_mcp.tool(
+    name="check_eligibility",
+    description=(
+        "Check whether an applicant satisfies statutory criteria for the Old Age Pension: "
+        "minimum age 60+ on application date and residence in one of the 6 recognized blocks "
+        "(Sonari, Rajapara, Dhemaji Pathar, Borgaon, Namti, Khelua)."
+    )
+)
+def check_eligibility(
+    dob: str = Field(..., description="Applicant date of birth in DD/MM/YYYY format (e.g. 15/08/1954)"),
+    block: str = Field(..., description="Applicant's block of residence (e.g. Sonari, Rajapara, Dhemaji Pathar, Borgaon, Namti, Khelua)"),
+    annual_income: Optional[float] = Field(0.0, description="Annual household income in INR (optional)")
+) -> dict:
+    parsed_dob = portal.parse_dob(dob)
     reasons = []
     eligible = True
     age = None
 
-    if dob is None:
+    if parsed_dob is None:
         eligible = False
         reasons.append("Date of birth must be given in DD/MM/YYYY format.")
     else:
-        age = portal.age_on(dob, portal.now_ist().date())
+        age = portal.age_on(parsed_dob, portal.now_ist().date())
         if age < portal.MIN_AGE:
             eligible = False
             reasons.append(f"Applicant age ({age} years) is below minimum required age of {portal.MIN_AGE} years.")
 
-    if not block_raw:
+    block_clean = (block or "").strip()
+    if not block_clean:
         eligible = False
         reasons.append("Block is required.")
-    elif block_raw not in portal.BLOCKS:
+    elif block_clean not in portal.BLOCKS:
         eligible = False
-        reasons.append(f"Block '{block_raw}' is not eligible. Eligible blocks: {', '.join(portal.BLOCKS)}.")
+        reasons.append(f"Block '{block_clean}' is not eligible. Eligible blocks: {', '.join(portal.BLOCKS)}.")
 
     hours_left = portal.deadline_remaining()
     if hours_left is None or hours_left <= 0:
@@ -354,100 +193,165 @@ def execute_check_eligibility(args, auth_mobile):
         "eligible": eligible,
         "calculated_age": age,
         "minimum_age_required": portal.MIN_AGE,
-        "block": block_raw,
-        "block_recognized": block_raw in portal.BLOCKS,
+        "block": block_clean,
+        "block_recognized": block_clean in portal.BLOCKS,
         "reasons": reasons if not eligible else ["Applicant meets all statutory age and block criteria for Old Age Pension."]
     }
 
 
-def execute_send_citizen_otp(args, auth_mobile):
-    mobile = auth_mobile or (args.get("mobile") or "").strip()
-    if not mobile or len(mobile) != 10 or not mobile.isdigit():
-        return {"success": False, "error": "invalid_mobile", "message": "Please provide a valid 10-digit mobile number."}
+@citizen_mcp.tool(
+    name="send_citizen_otp",
+    description=(
+        "Send a 6-digit one-time password (OTP) via SMS to the applicant's 10-digit mobile "
+        "number for verification and authentication. Valid for 5 minutes."
+    )
+)
+def send_citizen_otp(
+    mobile: Optional[str] = Field(None, description="10-digit mobile number of applicant. If not provided, uses authenticated session.")
+) -> dict:
+    eff_mobile = CURRENT_AUTH_CITIZEN.get() or (mobile or "").strip()
+    if not eff_mobile or len(eff_mobile) != 10 or not eff_mobile.isdigit():
+        return {
+            "success": False,
+            "error": "invalid_mobile",
+            "message": "Please provide a valid 10-digit mobile number."
+        }
 
     code = "%06d" % secrets.randbelow(1000000)
     conn = portal.get_db()
     cur = conn.cursor()
-    cur.execute("INSERT INTO otps (mobile, code, created_at) VALUES (%s, %s, %s)",
-                (mobile, code, datetime.now()))
+    cur.execute(
+        "INSERT INTO otps (mobile, code, created_at) VALUES (%s, %s, %s)",
+        (eff_mobile, code, datetime.now())
+    )
     conn.commit()
     cur.close(); conn.close()
 
-    portal.send_sms(mobile, f"Your Sewa Setu OTP is {code}. Valid for 5 minutes.")
+    portal.send_sms(eff_mobile, f"Your Sewa Setu OTP is {code}. Valid for 5 minutes.")
     return {
         "success": True,
-        "mobile": mobile,
+        "mobile": eff_mobile,
         "validity_seconds": portal.OTP_VALIDITY_SECONDS,
-        "message": f"Verification OTP has been sent via SMS to {mobile}. Valid for 5 minutes."
+        "message": f"Verification OTP has been sent via SMS to {eff_mobile}. Valid for 5 minutes."
     }
 
 
-def execute_verify_citizen_otp(args, auth_mobile):
-    mobile = auth_mobile or (args.get("mobile") or "").strip()
-    code = (args.get("otp") or "").strip()
+@citizen_mcp.tool(
+    name="verify_citizen_otp",
+    description=(
+        "Verify the 6-digit OTP received via SMS. On successful verification, "
+        "authenticates the citizen and issues a scoped Bearer token."
+    )
+)
+def verify_citizen_otp(
+    otp: str = Field(..., description="6-digit OTP code received via SMS"),
+    mobile: Optional[str] = Field(None, description="10-digit mobile number. If not provided, uses authenticated session.")
+) -> dict:
+    eff_mobile = CURRENT_AUTH_CITIZEN.get() or (mobile or "").strip()
+    code = (otp or "").strip()
 
-    if not mobile or len(mobile) != 10 or not mobile.isdigit():
+    if not eff_mobile or len(eff_mobile) != 10 or not eff_mobile.isdigit():
         return {"verified": False, "message": "Please provide a valid 10-digit mobile number."}
     if not code:
         return {"verified": False, "message": "Please provide the 6-digit OTP code."}
 
     conn = portal.get_db()
     cur = conn.cursor()
-    cur.execute("SELECT code, created_at FROM otps WHERE mobile = %s ORDER BY id DESC LIMIT 1", (mobile,))
+    cur.execute(
+        "SELECT code, created_at FROM otps WHERE mobile = %s ORDER BY id DESC LIMIT 1",
+        (eff_mobile,)
+    )
     row = cur.fetchone()
     cur.close(); conn.close()
 
     if row and secrets.compare_digest(row[0], code):
         elapsed = (datetime.now() - row[1]).total_seconds()
         if elapsed <= portal.OTP_VALIDITY_SECONDS:
+            session_ends = datetime.now() + timedelta(seconds=SESSION["citizen"]["session"])
+            access_token, claims = mint_access_token(
+                subject=f"citizen:{eff_mobile}",
+                role="citizen",
+                scope="citizen",
+                audience=ISSUER,
+                client_id="citizen-mcp-agent",
+                session_ends=session_ends
+            )
             return {
                 "verified": True,
-                "mobile": mobile,
-                "message": "OTP successfully verified. The mobile number is confirmed."
+                "authenticated": True,
+                "mobile": eff_mobile,
+                "access_token": access_token,
+                "token_type": "Bearer",
+                "expires_in": claims["exp"] - int(time.time()),
+                "session_ends": session_ends.isoformat(timespec="seconds"),
+                "message": (
+                    f"OTP successfully verified. Citizen {eff_mobile} is now authenticated. "
+                    f"Bearer token issued for subsequent authenticated sessions."
+                )
             }
         else:
             return {
                 "verified": False,
-                "mobile": mobile,
+                "mobile": eff_mobile,
                 "message": "The OTP code has expired. Please request a new OTP."
             }
     return {
         "verified": False,
-        "mobile": mobile,
+        "mobile": eff_mobile,
         "message": "Invalid OTP code. Please enter the correct 6-digit code."
     }
 
 
-def execute_submit_pension_application(args, auth_mobile):
-    mobile = auth_mobile or (args.get("mobile") or "").strip()
-    if not mobile or len(mobile) != 10 or not mobile.isdigit():
+@citizen_mcp.tool(
+    name="submit_pension_application",
+    description=(
+        "Submit an official application for the Old Age Pension scheme. Enforces all statutory "
+        "rules: applicant must be 60+, residing in an eligible block, valid bank account and IFSC, "
+        "and only ONE active application per mobile. System of record is the portal database."
+    )
+)
+def submit_pension_application(
+    applicant_name: str = Field(..., description="Full name of applicant as on age proof document"),
+    dob: str = Field(..., description="Date of birth in DD/MM/YYYY format"),
+    village: str = Field(..., description="Village or ward of residence"),
+    block: str = Field(..., description="Block name: Sonari, Rajapara, Dhemaji Pathar, Borgaon, Namti, or Khelua"),
+    bank_account: str = Field(..., description="Bank account number (9 to 18 digits)"),
+    ifsc: str = Field(..., description="Bank IFSC code (11 characters, e.g. SBIN0003077)"),
+    mobile: Optional[str] = Field(None, description="10-digit mobile number (required if not using authenticated session)"),
+    gender: Optional[str] = Field("Other", description="Gender: Male, Female, or Other"),
+    marital_status: Optional[str] = Field("Single", description="Marital status: Single, Married, Widowed, or Divorced"),
+    husband_name: Optional[str] = Field("", description="Husband's name if applicable"),
+    document_name: Optional[str] = Field("age_proof.pdf", description="Name of age proof document (e.g. aadhaar_card.pdf, voter_id.jpg)")
+) -> dict:
+    eff_mobile = CURRENT_AUTH_CITIZEN.get() or (mobile or "").strip()
+    if not eff_mobile or len(eff_mobile) != 10 or not eff_mobile.isdigit():
         return {
             "success": False,
             "error": "invalid_mobile",
             "message": "A valid 10-digit mobile number is required to submit an application."
         }
 
-    # Ensure upload directory exists and create simulated proof document if not provided
-    doc_name = args.get("document_name") or "age_proof_document.pdf"
+    # Ensure upload directory exists and create simulated proof document
     os.makedirs(portal.UPLOAD_DIR, exist_ok=True)
-    doc_filename = f"{mobile}_{os.path.basename(doc_name)}"
+    doc_clean_name = document_name or "age_proof_document.pdf"
+    doc_filename = f"{eff_mobile}_{os.path.basename(doc_clean_name)}"
     doc_path = os.path.join(portal.UPLOAD_DIR, doc_filename)
 
     if not os.path.exists(doc_path):
         with open(doc_path, "wb") as f:
-            f.write(f"Proof of age document for applicant {args.get('applicant_name', 'Citizen')} (Mobile: {mobile})".encode("utf-8"))
+            f.write(f"Proof of age document for applicant {applicant_name} (Mobile: {eff_mobile})".encode("utf-8"))
 
     # Validate through single source of truth in portal
     form_data = {
-        "applicant_name": args.get("applicant_name"),
-        "dob": args.get("dob"),
-        "gender": args.get("gender") or "Other",
-        "marital_status": args.get("marital_status") or "Single",
-        "husband_name": args.get("husband_name") or "",
-        "village": args.get("village"),
-        "block": args.get("block"),
-        "bank_account": args.get("bank_account"),
-        "ifsc": args.get("ifsc"),
+        "applicant_name": applicant_name,
+        "dob": dob,
+        "gender": gender or "Other",
+        "marital_status": marital_status or "Single",
+        "husband_name": husband_name or "",
+        "village": village,
+        "block": block,
+        "bank_account": bank_account,
+        "ifsc": ifsc,
     }
 
     errors, cleaned = portal.validate_application(form_data, doc_path)
@@ -463,7 +367,7 @@ def execute_submit_pension_application(args, auth_mobile):
     cur = conn.cursor()
 
     # Check for active existing application
-    existing = portal.active_application(cur, mobile)
+    existing = portal.active_application(cur, eff_mobile)
     if existing:
         cur.close(); conn.close()
         return {
@@ -473,18 +377,18 @@ def execute_submit_pension_application(args, auth_mobile):
             "existing_status": existing[2],
             "message": (
                 f"An active application {existing[1]} (Status: {existing[2]}) already exists "
-                f"for mobile {mobile}. A pending application can be withdrawn before applying afresh."
+                f"for mobile {eff_mobile}. A pending application can be withdrawn before applying afresh."
             )
         }
 
     # Persist in portal database
-    new_id, app_no = portal.create_application(cur, mobile, cleaned)
+    new_id, app_no = portal.create_application(cur, eff_mobile, cleaned)
     conn.commit()
     cur.close(); conn.close()
 
     # Send confirmation SMS
     portal.send_sms(
-        mobile,
+        eff_mobile,
         f"Sewa Setu: application {app_no} received. Track at the status portal with "
         f"mobile no. and password (DOB as DDMMYYYY)."
     )
@@ -495,7 +399,7 @@ def execute_submit_pension_application(args, auth_mobile):
         "application_no": app_no,
         "status": "PENDING",
         "applicant_name": cleaned["applicant_name"],
-        "mobile": mobile,
+        "mobile": eff_mobile,
         "dob": cleaned["dob"].strftime("%d/%m/%Y"),
         "block": cleaned["block"],
         "village": cleaned["village"],
@@ -508,11 +412,22 @@ def execute_submit_pension_application(args, auth_mobile):
     }
 
 
-def execute_get_application_status(args, auth_mobile):
-    mobile = auth_mobile or (args.get("mobile") or "").strip()
-    app_no = (args.get("application_no") or "").strip()
+@citizen_mcp.tool(
+    name="get_application_status",
+    description=(
+        "Check current status and decision details for a citizen's application on the "
+        "Sewa Setu portal (PENDING, APPROVED, DEEMED_APPROVED, REJECTED, or WITHDRAWN), "
+        "including SLA elapsed days and audit trail."
+    )
+)
+def get_application_status(
+    mobile: Optional[str] = Field(None, description="10-digit mobile number of the applicant (optional if application_no provided)"),
+    application_no: Optional[str] = Field(None, description="Official application number (e.g. SSP26123456) (optional if mobile provided)")
+) -> dict:
+    eff_mobile = CURRENT_AUTH_CITIZEN.get() or (mobile or "").strip()
+    app_no = (application_no or "").strip()
 
-    if not mobile and not app_no:
+    if not eff_mobile and not app_no:
         return {
             "found": False,
             "message": "Please provide either the mobile number or application number."
@@ -520,13 +435,13 @@ def execute_get_application_status(args, auth_mobile):
 
     conn = portal.get_db()
     cur = conn.cursor()
-    if app_no and mobile:
+    if app_no and eff_mobile:
         cur.execute(
             """SELECT id, application_no, applicant_name, mobile, dob, village, block,
                       bank_account, ifsc, status, submitted_at, decided_at, decided_by
                FROM applications WHERE application_no = %s AND mobile = %s
                ORDER BY submitted_at DESC LIMIT 1""",
-            (app_no, mobile)
+            (app_no, eff_mobile)
         )
     elif app_no:
         cur.execute(
@@ -542,7 +457,7 @@ def execute_get_application_status(args, auth_mobile):
                       bank_account, ifsc, status, submitted_at, decided_at, decided_by
                FROM applications WHERE mobile = %s
                ORDER BY submitted_at DESC LIMIT 1""",
-            (mobile,)
+            (eff_mobile,)
         )
 
     row = cur.fetchone()
@@ -601,55 +516,71 @@ def execute_get_application_status(args, auth_mobile):
     }
 
 
-def execute_withdraw_pension_application(args, auth_mobile):
-    mobile = auth_mobile or (args.get("mobile") or "").strip()
-    app_no = (args.get("application_no") or "").strip()
+@citizen_mcp.tool(
+    name="withdraw_pension_application",
+    description=(
+        "Withdraw a PENDING application so the applicant can correct mistakes and submit "
+        "a fresh application."
+    )
+)
+def withdraw_pension_application(
+    application_no: str = Field(..., description="Application number to withdraw (e.g. SSP26123456)"),
+    mobile: Optional[str] = Field(None, description="10-digit mobile number (required for verification if unauthenticated)")
+) -> dict:
+    eff_mobile = CURRENT_AUTH_CITIZEN.get() or (mobile or "").strip()
+    app_no = (application_no or "").strip()
 
     if not app_no:
         return {"success": False, "message": "Application number is required."}
 
+    if not eff_mobile or len(eff_mobile) != 10 or not eff_mobile.isdigit():
+        return {
+            "success": False,
+            "error": "mobile_required",
+            "message": "Applicant 10-digit mobile number is required to verify ownership before withdrawing an application."
+        }
+
     conn = portal.get_db()
     cur = conn.cursor()
 
-    if mobile:
-        cur.execute(
-            """UPDATE applications SET status = 'WITHDRAWN', decided_at = %s, decided_by = 'APPLICANT'
-               WHERE application_no = %s AND mobile = %s AND status = 'PENDING'
-               RETURNING id, application_no, mobile""",
-            (datetime.now(), app_no, mobile)
-        )
-    else:
-        cur.execute(
-            """UPDATE applications SET status = 'WITHDRAWN', decided_at = %s, decided_by = 'APPLICANT'
-               WHERE application_no = %s AND status = 'PENDING'
-               RETURNING id, application_no, mobile""",
-            (datetime.now(), app_no)
-        )
+    cur.execute(
+        """UPDATE applications SET status = 'WITHDRAWN', decided_at = %s, decided_by = 'APPLICANT'
+           WHERE application_no = %s AND mobile = %s AND status = 'PENDING'
+           RETURNING id, application_no, mobile""",
+        (datetime.now(), app_no, eff_mobile)
+    )
 
     row = cur.fetchone()
     if row:
-        app_id, application_no, app_mobile = row
+        app_id, application_no_val, app_mobile = row
         portal.write_audit(cur, app_id, "WITHDRAW", f"applicant:{app_mobile}")
         conn.commit()
         cur.close(); conn.close()
         return {
             "success": True,
-            "application_no": application_no,
+            "application_no": application_no_val,
             "status": "WITHDRAWN",
-            "message": f"Application {application_no} has been successfully withdrawn. You may now apply afresh."
+            "message": f"Application {application_no_val} has been successfully withdrawn. You may now apply afresh."
         }
 
     cur.close(); conn.close()
     return {
         "success": False,
-        "message": f"Unable to withdraw application {app_no}. Either it does not exist, is not in PENDING status, or mobile mismatch."
+        "message": f"Unable to withdraw application {app_no}. Either it does not exist, is not in PENDING status, or mobile number does not match."
     }
 
 
-def execute_get_acknowledgment(args, auth_mobile):
-    mobile = auth_mobile or (args.get("mobile") or "").strip()
-    app_no = (args.get("application_no") or "").strip()
-
+@citizen_mcp.tool(
+    name="get_acknowledgment",
+    description=(
+        "Retrieve formal acknowledgment details and official receipt PDF link for a submitted application."
+    )
+)
+def get_acknowledgment(
+    application_no: str = Field(..., description="Application number (e.g. SSP26123456)"),
+    mobile: Optional[str] = Field(None, description="10-digit mobile number (optional if authenticated)")
+) -> dict:
+    app_no = (application_no or "").strip()
     if not app_no:
         return {"found": False, "message": "Application number is required."}
 
@@ -684,23 +615,30 @@ def execute_get_acknowledgment(args, auth_mobile):
     }
 
 
-TOOL_HANDLERS = {
-    "get_scheme_guidelines": execute_get_scheme_guidelines,
-    "check_eligibility": execute_check_eligibility,
-    "send_citizen_otp": execute_send_citizen_otp,
-    "verify_citizen_otp": execute_verify_citizen_otp,
-    "submit_pension_application": execute_submit_pension_application,
-    "get_application_status": execute_get_application_status,
-    "withdraw_pension_application": execute_withdraw_pension_application,
-    "get_acknowledgment": execute_get_acknowledgment,
-}
+def _get_sdk_tools_schema() -> List[Dict[str, Any]]:
+    """Helper to retrieve JSON schema for all registered tools from the MCP SDK."""
+    tools = asyncio.run(citizen_mcp.list_tools())
+    res = []
+    for t in tools:
+        schema = t.input_schema if hasattr(t, "input_schema") else {"type": "object", "properties": {}}
+        res.append({
+            "name": t.name,
+            "description": t.description or "",
+            "inputSchema": schema,
+            "input_schema": schema
+        })
+    return res
+
+
+# Cached/dynamic tool definition list for backwards-compatibility
+CITIZEN_TOOLS = _get_sdk_tools_schema()
 
 
 # ---------------------------------------------------------------------------
-# JSON-RPC 2.0 Dispatcher
+# Protocol-Compliant JSON-RPC 2.0 Dispatcher (MCP 2024-11-05 Specification)
 # ---------------------------------------------------------------------------
 
-def handle_jsonrpc_request(req_data, auth_mobile):
+def handle_jsonrpc_request(req_data: Any, auth_mobile: Optional[str]) -> Optional[Dict[str, Any]]:
     if not isinstance(req_data, dict):
         return {
             "jsonrpc": "2.0",
@@ -711,11 +649,11 @@ def handle_jsonrpc_request(req_data, auth_mobile):
     req_id = req_data.get("id")
     method = req_data.get("method")
     params = req_data.get("params") or {}
-
-    # Notifications do not return a response if no ID
     is_notification = "id" not in req_data
 
+    # 1. Connection Handshake
     if method == "initialize":
+        client_proto = params.get("protocolVersion", "2024-11-05")
         result = {
             "protocolVersion": "2024-11-05",
             "capabilities": {
@@ -745,23 +683,58 @@ def handle_jsonrpc_request(req_data, auth_mobile):
     elif method == "ping":
         return {"jsonrpc": "2.0", "id": req_id, "result": {}}
 
+    # 2. Tool Discovery
     elif method == "tools/list":
-        return {"jsonrpc": "2.0", "id": req_id, "result": {"tools": CITIZEN_TOOLS}}
+        tools = _get_sdk_tools_schema()
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "tools": tools
+            }
+        }
 
+    # 3. Tool Execution & Input Validation via MCP SDK
     elif method == "tools/call":
         tool_name = params.get("name")
-        args = params.get("arguments") or {}
-
-        if tool_name not in TOOL_HANDLERS:
+        args = params.get("arguments")
+        if args is None:
+            args = {}
+        elif not isinstance(args, dict):
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
-                "error": {"code": -32601, "message": f"Tool '{tool_name}' not found."}
+                "error": {"code": -32602, "message": "Invalid params: 'arguments' must be an object"}
             }
 
+        # Set ContextVar for duration of execution
+        cv_token = CURRENT_AUTH_CITIZEN.set(auth_mobile)
         try:
-            handler = TOOL_HANDLERS[tool_name]
-            result_data = handler(args, auth_mobile)
+            call_res = asyncio.run(citizen_mcp.call_tool(tool_name, args))
+            content_list = []
+            for c in getattr(call_res, "content", []):
+                content_list.append({
+                    "type": getattr(c, "type", "text"),
+                    "text": getattr(c, "text", str(c))
+                })
+
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": content_list,
+                    "isError": getattr(call_res, "is_error", False)
+                }
+            }
+        except ToolError as te:
+            err_msg = str(te)
+            if "Unknown tool:" in err_msg:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32601, "message": f"Tool '{tool_name}' not found."}
+                }
+            # Return protocol-compliant tool error response with validation details
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -769,10 +742,24 @@ def handle_jsonrpc_request(req_data, auth_mobile):
                     "content": [
                         {
                             "type": "text",
-                            "text": json.dumps(result_data, indent=2)
+                            "text": f"Input validation error: {err_msg}"
                         }
                     ],
-                    "isError": False
+                    "isError": True
+                }
+            }
+        except UnexpectedToolError as ute:
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Execution error in tool '{tool_name}': {str(ute)}"
+                        }
+                    ],
+                    "isError": True
                 }
             }
         except Exception as e:
@@ -783,12 +770,14 @@ def handle_jsonrpc_request(req_data, auth_mobile):
                     "content": [
                         {
                             "type": "text",
-                            "text": f"Error executing tool '{tool_name}': {str(e)}"
+                            "text": f"Unexpected error executing '{tool_name}': {str(e)}"
                         }
                     ],
                     "isError": True
                 }
             }
+        finally:
+            CURRENT_AUTH_CITIZEN.reset(cv_token)
 
     else:
         if is_notification:
@@ -801,7 +790,7 @@ def handle_jsonrpc_request(req_data, auth_mobile):
 
 
 # ---------------------------------------------------------------------------
-# HTTP & SSE Routes
+# HTTP & SSE Transports
 # ---------------------------------------------------------------------------
 
 @mcp_citizen.after_request
@@ -809,6 +798,7 @@ def _cors_headers(resp):
     resp.headers["Access-Control-Allow-Origin"] = "*"
     resp.headers["Access-Control-Allow-Headers"] = "*"
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    resp.headers["Access-Control-Expose-Headers"] = "Mcp-Session-Id"
     return resp
 
 
@@ -836,31 +826,33 @@ def oauth_protected_resource():
 def mcp_streamable_http():
     """
     Public Streamable HTTP endpoint for Citizen MCP.
-    - GET: Returns service info or SSE stream if requested.
-    - POST: Standard Streamable HTTP JSON-RPC 2.0 endpoint.
+    - GET: Returns service info or initiates SSE stream if requested.
+    - POST: Streamable HTTP JSON-RPC 2.0 endpoint (single or batch).
     """
     auth_mobile = get_authenticated_citizen(request)
 
+    # If client asks for event stream on GET, delegate to SSE
+    accept = request.headers.get("Accept", "")
     if request.method == "GET":
-        accept = request.headers.get("Accept", "")
-        if "text/event-stream" in accept or request.args.get("sse"):
+        if "text/event-stream" in accept:
             return sse_connect(auth_mobile)
-
+        tools = _get_sdk_tools_schema()
         return jsonify({
             "service": "Sewa Setu Citizen MCP Server",
-            "version": "1.0.0",
-            "status": "ready",
-            "mode": "public_dual_mode",
-            "authenticated_as": f"citizen:{auth_mobile}" if auth_mobile else "anonymous_direct_connection",
+            "protocol": "Model Context Protocol (MCP)",
+            "protocol_version": "2024-11-05",
+            "sdk": "mcp.server.mcpserver (Official Python MCP SDK)",
             "transports": {
                 "streamable_http": f"{ISSUER}/mcp/citizen",
                 "sse": f"{ISSUER}/mcp/citizen/sse",
                 "messages": f"{ISSUER}/mcp/citizen/messages"
             },
-            "tools_count": len(CITIZEN_TOOLS)
+            "tools_count": len(tools),
+            "authenticated": auth_mobile is not None,
+            "authenticated_mobile": auth_mobile
         })
 
-    # POST: JSON-RPC 2.0 over HTTP
+    # POST: JSON-RPC 2.0 over Streamable HTTP
     body = request.get_json(silent=True)
     if body is None:
         return jsonify({
@@ -869,15 +861,24 @@ def mcp_streamable_http():
             "error": {"code": -32700, "message": "Parse error: invalid JSON"}
         }), 400
 
+    # Ensure a session id is assigned/maintained
+    session_id = request.headers.get("Mcp-Session-Id") or secrets.token_hex(16)
+
     if isinstance(body, list):
         responses = [handle_jsonrpc_request(item, auth_mobile) for item in body]
         valid_responses = [r for r in responses if r is not None]
-        return jsonify(valid_responses)
+        resp = jsonify(valid_responses)
+        resp.headers["Mcp-Session-Id"] = session_id
+        return resp
     else:
-        resp = handle_jsonrpc_request(body, auth_mobile)
-        if resp is None:
-            return ("", 204)
-        return jsonify(resp)
+        rpc_resp = handle_jsonrpc_request(body, auth_mobile)
+        if rpc_resp is None:
+            res = Response("", status=204)
+            res.headers["Mcp-Session-Id"] = session_id
+            return res
+        resp = jsonify(rpc_resp)
+        resp.headers["Mcp-Session-Id"] = session_id
+        return resp
 
 
 @mcp_citizen.route("/mcp/citizen/sse", methods=["GET"])
@@ -887,15 +888,15 @@ def mcp_sse():
     return sse_connect(auth_mobile)
 
 
-def sse_connect(auth_mobile):
+def sse_connect(auth_mobile: Optional[str]):
     session_id = secrets.token_hex(16)
-    q = queue.Queue()
+    q: queue.Queue = queue.Queue()
 
     with _SSE_LOCK:
         _SSE_SESSIONS[session_id] = {"queue": q, "auth_mobile": auth_mobile}
 
     def event_stream():
-        # First event: tell the client where to POST messages
+        # First event: tell the client where to POST messages (MCP SSE specification)
         endpoint_url = f"{ISSUER}/mcp/citizen/messages?session_id={session_id}"
         yield f"event: endpoint\ndata: {endpoint_url}\n\n"
 
@@ -905,7 +906,6 @@ def sse_connect(auth_mobile):
                     msg = q.get(timeout=20)
                     yield f"event: message\ndata: {json.dumps(msg)}\n\n"
                 except queue.Empty:
-                    # Keep-alive comment
                     yield ": keepalive\n\n"
         finally:
             with _SSE_LOCK:
@@ -917,7 +917,8 @@ def sse_connect(auth_mobile):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
+            "X-Accel-Buffering": "no",
+            "Mcp-Session-Id": session_id
         }
     )
 
