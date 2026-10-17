@@ -86,6 +86,14 @@ def get_db():
     )
 
 
+# Automatically initialize schema and seed if running against a fresh database
+try:
+    import init_db
+    init_db.run_init()
+except Exception as _e:
+    app.logger.warning(f"Database init check: {_e}")
+
+
 def sanitize(value, maxlen=100):
     # Trim whitespace and cap at the column width, counting characters (not
     # bytes) so Assamese/Bangla names are stored intact.
