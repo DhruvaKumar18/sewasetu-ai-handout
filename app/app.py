@@ -74,6 +74,9 @@ except Exception:
 
 
 def get_db():
+    db_url = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_PUBLIC_URL")
+    if db_url:
+        return psycopg2.connect(db_url)
     return psycopg2.connect(
         host=os.environ.get("DB_HOST", config.get("database", "host")),
         port=os.environ.get("DB_PORT", config.get("database", "port")),
@@ -769,4 +772,5 @@ app.register_blueprint(_evals_blueprint)
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port, debug=False)
