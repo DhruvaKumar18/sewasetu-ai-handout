@@ -37,10 +37,10 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 from mcp.types import Tool, TextContent, CallToolResult
 
+mcp_citizen = Blueprint("mcp_citizen", __name__)
+
 import app as portal
 from oauth import ISSUER, signing_key, mint_access_token, SESSION
-
-mcp_citizen = Blueprint("mcp_citizen", __name__)
 
 # Active SSE sessions: session_id -> queue.Queue
 _SSE_SESSIONS: Dict[str, Dict[str, Any]] = {}
@@ -613,6 +613,47 @@ def get_acknowledgment(
         "status": row[10],
         "acknowledgment_pdf_url": f"{ISSUER}/ack/{app_id}.pdf"
     }
+
+
+def _clean_args(fn, args):
+    import inspect
+    from pydantic.fields import FieldInfo
+    from pydantic_core import PydanticUndefined
+    sig = inspect.signature(fn)
+    clean = {}
+    for name, param in sig.parameters.items():
+        if args and name in args:
+            clean[name] = args[name]
+        elif param.default is not inspect.Parameter.empty:
+            d = param.default
+            if isinstance(d, FieldInfo):
+                clean[name] = "" if d.default is PydanticUndefined else d.default
+            else:
+                clean[name] = d
+    return clean
+
+
+def _make_citizen_handler(fn):
+    def _handler(args=None, auth_mobile=None):
+        token = CURRENT_AUTH_CITIZEN.set(auth_mobile)
+        try:
+            return fn(**_clean_args(fn, args))
+        finally:
+            CURRENT_AUTH_CITIZEN.reset(token)
+    return _handler
+
+
+TOOL_HANDLERS = {
+    "get_scheme_guidelines": _make_citizen_handler(get_scheme_guidelines),
+    "check_eligibility": _make_citizen_handler(check_eligibility),
+    "send_citizen_otp": _make_citizen_handler(send_citizen_otp),
+    "verify_citizen_otp": _make_citizen_handler(verify_citizen_otp),
+    "submit_pension_application": _make_citizen_handler(submit_pension_application),
+    "get_application_status": _make_citizen_handler(get_application_status),
+    "withdraw_pension_application": _make_citizen_handler(withdraw_pension_application),
+    "get_acknowledgment": _make_citizen_handler(get_acknowledgment),
+}
+CITIZEN_TOOL_HANDLERS = TOOL_HANDLERS
 
 
 def _get_sdk_tools_schema() -> List[Dict[str, Any]]:

@@ -33,10 +33,10 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 from mcp.types import Tool, TextContent, CallToolResult
 
+mcp_admin = Blueprint("mcp_admin", __name__)
+
 import app as portal
 from oauth import ISSUER, signing_key
-
-mcp_admin = Blueprint("mcp_admin", __name__)
 
 # Active SSE sessions: session_id -> queue.Queue
 _SSE_ADMIN_SESSIONS: Dict[str, Dict[str, Any]] = {}
@@ -536,11 +536,29 @@ def _get_admin_sdk_tools_schema() -> List[Dict[str, Any]]:
 # Cached/dynamic tool definition list for backwards-compatibility
 ADMIN_TOOLS = _get_admin_sdk_tools_schema()
 
+def _clean_args(fn, args):
+    import inspect
+    from pydantic.fields import FieldInfo
+    from pydantic_core import PydanticUndefined
+    sig = inspect.signature(fn)
+    clean = {}
+    for name, param in sig.parameters.items():
+        if args and name in args:
+            clean[name] = args[name]
+        elif param.default is not inspect.Parameter.empty:
+            d = param.default
+            if isinstance(d, FieldInfo):
+                clean[name] = "" if d.default is PydanticUndefined else d.default
+            else:
+                clean[name] = d
+    return clean
+
+
 def _make_admin_handler(tool_fn):
-    def _handler(args, actor=None):
+    def _handler(args=None, actor=None):
         token = CURRENT_ADMIN_ACTOR.set(actor)
         try:
-            return tool_fn(**(args or {}))
+            return tool_fn(**_clean_args(tool_fn, args))
         finally:
             CURRENT_ADMIN_ACTOR.reset(token)
     return _handler

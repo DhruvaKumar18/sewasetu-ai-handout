@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-17 10:02:14",
+  "timestamp": "2026-10-18 00:10:41",
   "total_personas": 6,
   "passed_personas": 6,
   "failed_personas": 0,
@@ -25,7 +25,7 @@
       "dialogue_prompt": "Namaskar. I am Dhiren Gogoi, age 67 from Sapekhati village in Borgaon. Can I get old age pension? Please help me apply.",
       "expected_db_state": "A new row in 'applications' with status 'PENDING', a new account in 'portal_users', and audit log record 'SUBMIT'.",
       "passed": true,
-      "duration_seconds": 0.27,
+      "duration_seconds": 0.68,
       "assertions": [
         {
           "description": "Application record created with status 'PENDING' in block 'Borgaon'",
@@ -43,7 +43,7 @@
         },
         {
           "description": "Statutory audit trail logs 'SUBMIT' action with applicant actor",
-          "sql": "SELECT action, actor FROM audit_log WHERE application_id = 100050",
+          "sql": "SELECT action, actor FROM audit_log WHERE application_id = 100069",
           "expected": "action = 'SUBMIT', actor = 'applicant:9864012345'",
           "actual": "action = 'SUBMIT', actor = 'applicant:9864012345'",
           "passed": true
@@ -93,16 +93,16 @@
           "tool_call": "verify_citizen_otp",
           "tool_args": {
             "mobile": "9864012345",
-            "otp": "170982"
+            "otp": "920831"
           },
           "tool_result": {
             "verified": true,
             "authenticated": true,
             "mobile": "9864012345",
-            "access_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjBhNmVhMDExMGZmZDQ0YmMiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAiLCJzdWIiOiJjaXRpemVuOjk4NjQwMTIzNDUiLCJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAiLCJzY29wZSI6ImNpdGl6ZW4iLCJyb2xlIjoiY2l0aXplbiIsImNsaWVudF9pZCI6ImNpdGl6ZW4tbWNwLWFnZW50IiwiaWF0IjoxNzkyMjExNTM0LCJleHAiOjE3OTIyMTI3MzQsImp0aSI6ImRjMTE0YWNjYWQxZDk3YzI4NDk5OGJjZiIsImtpbmQiOiJhY2Nlc3MiLCJzZXNzaW9uX2VuZHMiOjE3OTIyMTg3MzR9.hEdEw-NLU9peczuz0wr1_1y5_Id5w4yPQ72rXwS9Cu4tFd0M0oWMMMeTlrEMj9HPEEBPHUm66skdST3xZnj9xKitIKsU5T0WgeUMwap3B4a76XyLzrS-SvtmRWrVdwo5jhTxofs_vV0CYlaVFATkPrIbh6AaOK1jBAftOQfVh3EbauM-DK6Qf5BGBtJYEfmRBMnB7s-oNrhgbad3jedIE2QSy2Qxn8nsGVQT1K1rFc2Df62n9Vnqa8bbp30Nte-ARPab3Tp11Ku-obHKDlzhRClKDsfVLvMDGR-ixOP3zndgTarssMWdeC0znc8VwWZuizd5oUnMi7c4bSBG8mNpnQ",
+            "access_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjBhNmVhMDExMGZmZDQ0YmMiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAiLCJzdWIiOiJjaXRpemVuOjk4NjQwMTIzNDUiLCJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAiLCJzY29wZSI6ImNpdGl6ZW4iLCJyb2xlIjoiY2l0aXplbiIsImNsaWVudF9pZCI6ImNpdGl6ZW4tbWNwLWFnZW50IiwiaWF0IjoxNzkyMjYyNDQxLCJleHAiOjE3OTIyNjM2NDEsImp0aSI6ImQyYjBlOTM3OGVlNjZmOGM4YTY1YzE1NCIsImtpbmQiOiJhY2Nlc3MiLCJzZXNzaW9uX2VuZHMiOjE3OTIyNjk2NDF9.G40CfOnIPUT5BuUz0UtgiYYOOqvgBKUBYpPynuDc4-sQM9yUSRvqaxnuZ688XCtQvGb5cqVunwYcCbWGu5BxMD9FmNfj7z-1dbJJX3e9mhytajIZnOjIzCp_KXMbOuCmg2hLIqnFfi5vwQvRVCT5kkZ2ypa2rnYn_vHKPawIPIOyG3SxKg2WIpB6mDxM7rG_Og0brVIkfs9x4TvBchg-aa6odGNVLORq4RjZJzZqzo1GpAkVrgoVGBG5yUYc7Gah8Ky8zdC2rlnTwcVcqmwpqGo03JQ1BNxr9aLbZXJo0UjJ2sVOrnIGU-ViEUjYIpMy2iRn7agEbHD9iCw9N4NTdQ",
             "token_type": "Bearer",
             "expires_in": 1200,
-            "session_ends": "2026-10-17T12:02:14",
+            "session_ends": "2026-10-18T02:10:41",
             "message": "OTP successfully verified. Citizen 9864012345 is now authenticated. Bearer token issued for subsequent authenticated sessions."
           }
         },
@@ -124,17 +124,17 @@
           },
           "tool_result": {
             "success": true,
-            "application_id": 100050,
-            "application_no": "SSP26785185",
+            "application_id": 100069,
+            "application_no": "SSP26949708",
             "status": "PENDING",
             "applicant_name": "Dhiren Gogoi",
             "mobile": "9864012345",
             "dob": "12/04/1959",
             "block": "Borgaon",
             "village": "Sapekhati",
-            "submitted_at": "2026-10-17T10:02:14",
+            "submitted_at": "2026-10-18T00:10:41",
             "sla_days": 15,
-            "message": "Pension application SSP26785185 successfully submitted for Dhiren Gogoi. Status is PENDING. Under the Right to Public Services Act, statutory SLA is 15 days."
+            "message": "Pension application SSP26949708 successfully submitted for Dhiren Gogoi. Status is PENDING. Under the Right to Public Services Act, statutory SLA is 15 days."
           }
         }
       ]
@@ -313,11 +313,11 @@
       "dialogue_prompt": "I made a mistake in my bank account number in my last application. Can I change it or submit a new one?",
       "expected_db_state": "Initial application transitioned to 'WITHDRAWN'; fresh application successfully submitted with status 'PENDING'.",
       "passed": true,
-      "duration_seconds": 0.2,
+      "duration_seconds": 0.22,
       "assertions": [
         {
           "description": "Previous erroneous application transitioned to 'WITHDRAWN'",
-          "sql": "SELECT status FROM applications WHERE id = 100051",
+          "sql": "SELECT status FROM applications WHERE id = 100070",
           "expected": "status = 'WITHDRAWN'",
           "actual": "status = 'WITHDRAWN'",
           "passed": true
@@ -331,7 +331,7 @@
         },
         {
           "description": "Audit trail records statutory 'WITHDRAW' action by applicant",
-          "sql": "SELECT action FROM audit_log WHERE application_id = 100051",
+          "sql": "SELECT action FROM audit_log WHERE application_id = 100070",
           "expected": "action = 'WITHDRAW'",
           "actual": "Found 1 withdrawal audit entries",
           "passed": true
@@ -351,7 +351,7 @@
           },
           "tool_result": {
             "found": true,
-            "application_id": 100051,
+            "application_id": 100070,
             "application_no": "SSP26M44556",
             "applicant_name": "Mina Das",
             "mobile": "9864044556",
@@ -361,7 +361,7 @@
             "bank_account_last4": "3456",
             "ifsc": "WRONG000123",
             "status": "PENDING",
-            "submitted_at": "2026-10-14T10:02:14",
+            "submitted_at": "2026-10-15T00:10:41",
             "decided_at": null,
             "decided_by": null,
             "days_since_submission": 3,
@@ -371,7 +371,7 @@
                 "action": "SUBMIT",
                 "actor": "applicant:9864044556",
                 "note": "",
-                "timestamp": "2026-10-17T10:02:14"
+                "timestamp": "2026-10-18T00:10:41"
               }
             ],
             "status_description": "Application is pending review by the Block Development Officer."
@@ -413,17 +413,17 @@
           },
           "tool_result": {
             "success": true,
-            "application_id": 100052,
-            "application_no": "SSP26645129",
+            "application_id": 100071,
+            "application_no": "SSP26674677",
             "status": "PENDING",
             "applicant_name": "Mina Das",
             "mobile": "9864044556",
             "dob": "18/06/1961",
             "block": "Rajapara",
             "village": "Bordoloi",
-            "submitted_at": "2026-10-17T10:02:14",
+            "submitted_at": "2026-10-18T00:10:42",
             "sla_days": 15,
-            "message": "Pension application SSP26645129 successfully submitted for Mina Das. Status is PENDING. Under the Right to Public Services Act, statutory SLA is 15 days."
+            "message": "Pension application SSP26674677 successfully submitted for Mina Das. Status is PENDING. Under the Right to Public Services Act, statutory SLA is 15 days."
           }
         }
       ]
@@ -445,7 +445,7 @@
       "dialogue_prompt": "My application was submitted about 10 days back. What is the current status and how can I get my receipt paper?",
       "expected_db_state": "Application status accurately reported as PENDING with 10 days elapsed against 15-day SLA; valid PDF acknowledgment link generated.",
       "passed": true,
-      "duration_seconds": 0.13,
+      "duration_seconds": 0.24,
       "assertions": [
         {
           "description": "Status correctly returns 'PENDING' and elapsed time (10 days) against 15-day SLA",
@@ -457,8 +457,8 @@
         {
           "description": "Official acknowledgment returns correct application receipt and PDF link",
           "sql": "get_acknowledgment(application_no='SSP26E55443')",
-          "expected": "found = True, pdf_url contains '/ack/100053.pdf'",
-          "actual": "found = True, url = http://localhost:8000/ack/100053.pdf",
+          "expected": "found = True, pdf_url contains '/ack/100072.pdf'",
+          "actual": "found = True, url = http://localhost:8000/ack/100072.pdf",
           "passed": true
         }
       ],
@@ -476,7 +476,7 @@
           },
           "tool_result": {
             "found": true,
-            "application_id": 100053,
+            "application_id": 100072,
             "application_no": "SSP26E55443",
             "applicant_name": "Prabin Chetia",
             "mobile": "9864055443",
@@ -486,7 +486,7 @@
             "bank_account_last4": "4567",
             "ifsc": "SBIN0005678",
             "status": "PENDING",
-            "submitted_at": "2026-10-07T10:02:14",
+            "submitted_at": "2026-10-08T00:10:42",
             "decided_at": null,
             "decided_by": null,
             "days_since_submission": 10,
@@ -496,7 +496,7 @@
                 "action": "SUBMIT",
                 "actor": "applicant:9864055443",
                 "note": "",
-                "timestamp": "2026-10-17T10:02:14"
+                "timestamp": "2026-10-18T00:10:42"
               }
             ],
             "status_description": "Application is pending review by the Block Development Officer."
@@ -519,9 +519,9 @@
             "block": "Khelua",
             "bank_account_masked": "XXXXXXX4567",
             "ifsc": "SBIN0005678",
-            "submitted_at": "2026-10-07T10:02:14",
+            "submitted_at": "2026-10-08T00:10:42",
             "status": "PENDING",
-            "acknowledgment_pdf_url": "http://localhost:8000/ack/100053.pdf"
+            "acknowledgment_pdf_url": "http://localhost:8000/ack/100072.pdf"
           }
         }
       ]
@@ -538,18 +538,18 @@
       "dialogue_prompt": "Log in as Block Officer, check dashboard statistics, show pending applications in Sonari block, and approve the verified case.",
       "expected_db_state": "Target pending application transitioned to 'APPROVED', decided_by set to officer, and audit_log record added.",
       "passed": true,
-      "duration_seconds": 0.24,
+      "duration_seconds": 0.36,
       "assertions": [
         {
           "description": "Application transitioned to 'APPROVED' with decided_by stamped as 'admin'",
-          "sql": "SELECT status, decided_by FROM applications WHERE id = 99365",
+          "sql": "SELECT status, decided_by FROM applications WHERE id = 100056",
           "expected": "status = 'APPROVED', decided_by = 'admin'",
           "actual": "status = 'APPROVED', decided_by = 'admin'",
           "passed": true
         },
         {
           "description": "Officer verification note stamped immutably in statutory audit log",
-          "sql": "SELECT action, actor, note FROM audit_log WHERE application_id = 99365 AND action = 'APPROVED'",
+          "sql": "SELECT action, actor, note FROM audit_log WHERE application_id = 100056 AND action = 'APPROVED'",
           "expected": "action = 'APPROVED', note contains 'Physical document and village ...'",
           "actual": "action = 'APPROVED', note = 'Physical document and village revenue record verified by BDO Sonari.'",
           "passed": true
@@ -566,45 +566,37 @@
           "tool_call": "get_admin_dashboard_stats",
           "tool_args": {},
           "tool_result": {
-            "total_applications": 100007,
+            "total_applications": 100008,
             "status_breakdown": {
-              "APPROVED": 82910,
-              "DEEMED_APPROVED": 9000,
-              "PENDING": 694,
+              "APPROVED": 82911,
+              "DEEMED_APPROVED": 9690,
+              "PENDING": 4,
               "REJECTED": 7000,
               "WITHDRAWN": 403
             },
-            "pending_count": 694,
-            "approved_count": 82910,
-            "deemed_approved_count": 9000,
+            "pending_count": 4,
+            "approved_count": 82911,
+            "deemed_approved_count": 9690,
             "rejected_count": 7000,
             "withdrawn_count": 403,
-            "overdue_sla_pending_count": 691,
+            "overdue_sla_pending_count": 0,
             "statutory_sla_days": 15,
             "pending_by_block": [
               {
-                "block": "Dhemaji Pathar",
-                "pending_count": 124
+                "block": "Sonari",
+                "pending_count": 1
               },
               {
                 "block": "Khelua",
-                "pending_count": 124
+                "pending_count": 1
               },
               {
                 "block": "Rajapara",
-                "pending_count": 124
-              },
-              {
-                "block": "Sonari",
-                "pending_count": 116
-              },
-              {
-                "block": "Namti",
-                "pending_count": 111
+                "pending_count": 1
               },
               {
                 "block": "Borgaon",
-                "pending_count": 95
+                "pending_count": 1
               }
             ]
           }
@@ -624,133 +616,74 @@
               "block": "Sonari",
               "mobile": null
             },
-            "total_matching": 116,
+            "total_matching": 1,
             "limit": 5,
             "offset": 0,
             "applications": [
               {
-                "id": 99524,
-                "application_no": "SSP26318401",
-                "applicant_name": "Pramila Bora",
-                "mobile": "9313885759",
-                "dob": "02/02/1947",
-                "village": "Kakotibari",
+                "id": 100056,
+                "application_no": "SSP26262114",
+                "applicant_name": "Ganesh Saikia",
+                "mobile": "9864077889",
+                "dob": "15/03/1955",
+                "village": "Sonari Gaon",
                 "block": "Sonari",
                 "status": "PENDING",
-                "submitted_at": "2026-09-16T09:44:00",
-                "days_pending": 31,
-                "is_sla_breach": true
-              },
-              {
-                "id": 99426,
-                "application_no": "SSP26231701",
-                "applicant_name": "Hemoprova Talukdar",
-                "mobile": "8866801975",
-                "dob": "22/01/1945",
-                "village": "Namdang",
-                "block": "Sonari",
-                "status": "PENDING",
-                "submitted_at": "2026-09-16T10:27:00",
-                "days_pending": 30,
-                "is_sla_breach": true
-              },
-              {
-                "id": 99432,
-                "application_no": "SSP26295748",
-                "applicant_name": "Pramila Hazarika",
-                "mobile": "6923080542",
-                "dob": "08/09/1950",
-                "village": "Namdang",
-                "block": "Sonari",
-                "status": "PENDING",
-                "submitted_at": "2026-09-16T11:00:00",
-                "days_pending": 30,
-                "is_sla_breach": true
-              },
-              {
-                "id": 99587,
-                "application_no": "SSP26078470",
-                "applicant_name": "Sarat Ahmed",
-                "mobile": "9929350173",
-                "dob": "15/12/1956",
-                "village": "Namdang",
-                "block": "Sonari",
-                "status": "PENDING",
-                "submitted_at": "2026-09-16T11:14:00",
-                "days_pending": 30,
-                "is_sla_breach": true
-              },
-              {
-                "id": 99366,
-                "application_no": "SSP26017106",
-                "applicant_name": "Tileswari Das",
-                "mobile": "7090466292",
-                "dob": "02/04/1944",
-                "village": "Bhekulajan",
-                "block": "Sonari",
-                "status": "PENDING",
-                "submitted_at": "2026-09-16T11:35:00",
-                "days_pending": 30,
-                "is_sla_breach": true
+                "submitted_at": "2026-10-13T00:05:14",
+                "days_pending": 5,
+                "is_sla_breach": false
               }
             ]
           }
         },
         {
           "sender": "assistant",
-          "message": "Inspecting complete dossier and audit history for SSP26637135...",
+          "message": "Inspecting complete dossier and audit history for SSP26262114...",
           "tool_call": "get_application_details",
           "tool_args": {
-            "application_no": "SSP26637135"
+            "application_no": "SSP26262114"
           },
           "tool_result": {
             "found": true,
-            "id": 99365,
-            "application_no": "SSP26637135",
-            "applicant_name": "Haren Ahmed",
-            "mobile": "8775963414",
-            "dob": "27/09/1939",
+            "id": 100056,
+            "application_no": "SSP26262114",
+            "applicant_name": "Ganesh Saikia",
+            "mobile": "9864077889",
+            "dob": "15/03/1955",
             "gender": "Male",
-            "marital_status": "Unmarried",
-            "husband_name": "",
-            "village": "Lakhipur",
+            "marital_status": "Married",
+            "husband_name": null,
+            "village": "Sonari Gaon",
             "block": "Sonari",
-            "bank_account": "384151964788",
-            "ifsc": "PUNB0556610",
-            "doc_path": "",
+            "bank_account": "98765432101",
+            "ifsc": "SBIN0003077",
+            "doc_path": "/tmp/doc.pdf",
             "status": "PENDING",
-            "submitted_at": "2026-09-27T14:06:00",
+            "submitted_at": "2026-10-13T00:05:14",
             "decided_at": null,
             "decided_by": null,
-            "days_elapsed": 19,
-            "is_sla_overdue": true,
-            "audit_trail": [
-              {
-                "timestamp": "2026-09-27T14:06:00",
-                "action": "SUBMIT",
-                "actor": "applicant:8775963414",
-                "note": ""
-              }
-            ]
+            "days_elapsed": 5,
+            "is_sla_overdue": false,
+            "audit_trail": []
           }
         },
         {
           "sender": "assistant",
-          "message": "Recording statutory approval for application SSP26637135...",
+          "message": "Recording statutory approval for application SSP26262114...",
           "tool_call": "approve_pension_application",
           "tool_args": {
-            "application_no": "SSP26637135",
+            "application_no": "SSP26262114",
             "note": "Physical document and village revenue record verified by BDO Sonari."
           },
           "tool_result": {
             "success": true,
-            "application_id": 99365,
-            "application_no": "SSP26637135",
+            "application_id": 100056,
+            "application_no": "SSP26262114",
             "status": "APPROVED",
             "decided_by": "admin",
-            "decided_at": "2026-10-17T10:02:15",
+            "decided_at": "2026-10-18T00:10:42",
             "note": "Physical document and village revenue record verified by BDO Sonari.",
-            "message": "Application SSP26637135 has been APPROVED successfully. SMS notification sent to 8775963414."
+            "message": "Application SSP26262114 has been APPROVED successfully. SMS notification sent to 9864077889."
           }
         }
       ]
