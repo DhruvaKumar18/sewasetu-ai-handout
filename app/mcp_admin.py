@@ -536,6 +536,25 @@ def _get_admin_sdk_tools_schema() -> List[Dict[str, Any]]:
 # Cached/dynamic tool definition list for backwards-compatibility
 ADMIN_TOOLS = _get_admin_sdk_tools_schema()
 
+def _make_admin_handler(tool_fn):
+    def _handler(args, actor=None):
+        token = CURRENT_ADMIN_ACTOR.set(actor)
+        try:
+            return tool_fn(**(args or {}))
+        finally:
+            CURRENT_ADMIN_ACTOR.reset(token)
+    return _handler
+
+ADMIN_TOOL_HANDLERS = {
+    "get_admin_dashboard_stats": _make_admin_handler(get_admin_dashboard_stats),
+    "list_applications": _make_admin_handler(list_applications),
+    "get_application_details": _make_admin_handler(get_application_details),
+    "approve_pension_application": _make_admin_handler(approve_pension_application),
+    "reject_pension_application": _make_admin_handler(reject_pension_application),
+    "trigger_deemed_approval": _make_admin_handler(trigger_deemed_approval),
+}
+
+
 
 # ---------------------------------------------------------------------------
 # Admin JSON-RPC 2.0 Dispatcher (MCP 2024-11-05 Specification)
