@@ -27,7 +27,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 import jwt
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, render_template
 from pydantic import Field
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
@@ -780,6 +780,17 @@ def mcp_admin_streamable_http():
             return sse_admin_connect(actor)
 
         tools = _get_admin_sdk_tools_schema()
+
+        # If accessed by a web browser, render the rich Interactive Admin MCP Explorer UI
+        if ("text/html" in accept or "application/xhtml+xml" in accept) and not request.args.get("format") == "json" and not request.args.get("json"):
+            return render_template(
+                "mcp_admin_explorer.html",
+                tools=tools,
+                issuer=ISSUER,
+                actor=actor,
+                tools_count=len(tools)
+            )
+
         return jsonify({
             "service": "Sewa Setu Block Officer / Admin MCP Server",
             "version": "1.0.0",
@@ -795,6 +806,7 @@ def mcp_admin_streamable_http():
                 "messages": f"{ISSUER}/mcp/admin/messages"
             },
             "tools_count": len(tools),
+            "tools": [{"name": t["name"], "description": t["description"]} for t in tools],
             "auth_guidance": "Pass 'Authorization: Bearer <admin-token>' (default token: sewasetu-admin-token-2026 or portal admin password)"
         })
 

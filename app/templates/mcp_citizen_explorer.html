@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .mcp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .badge-green { background: #e6f9ed; color: #127538; border: 1px solid #b5e9c7; }
+  .badge-blue { background: #ebf5ff; color: #0056b3; border: 1px solid #b8daff; }
+  .badge-purple { background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
+  .tool-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: all 0.2s ease;
+  }
+  .tool-card:hover {
+    border-color: #0b3d6e;
+    box-shadow: 0 4px 12px rgba(11,61,110,0.08);
+  }
+  .code-pill {
+    background: #f1f5f9;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    color: #0f172a;
+  }
+  .btn-test {
+    background: #0b3d6e;
+    color: #ffffff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-test:hover { background: #082d52; color: #ffffff; }
+  .btn-outline {
+    background: transparent;
+    color: #0b3d6e;
+    border: 1px solid #0b3d6e;
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .btn-outline:hover { background: #f0f7ff; }
+  .result-box {
+    margin-top: 14px;
+    background: #0f172a;
+    color: #38bdf8;
+    padding: 14px;
+    border-radius: 8px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    overflow-x: auto;
+    max-height: 280px;
+    white-space: pre-wrap;
+    display: none;
+  }
+</style>
+
+<div style="max-width: 980px; margin: 20px auto; padding: 0 16px;">
+  
+  <!-- Header Banner -->
+  <div style="background: linear-gradient(135deg, #0b3d6e 0%, #082847 100%); color: #ffffff; padding: 30px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12); position: relative;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+          <span style="font-size: 28px;">🤖</span>
+          <h1 style="margin: 0; font-size: 26px; color: #ffffff; font-weight: 700;">Citizen Model Context Protocol (MCP) Server</h1>
+        </div>
+        <p style="margin: 0 0 14px 0; color: #cfe0f3; font-size: 15px; max-width: 680px; line-height: 1.5;">
+          Official streamable MCP endpoint for AI Assistants (Claude Code, Cursor, LLMs) to assist applicants with scheme guidelines, eligibility checks, OTP verification, and pension tracking.
+        </p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <span class="mcp-badge badge-green">● Protocol Active</span>
+          <span class="mcp-badge badge-blue">Official MCP Python SDK (v2024-11-05)</span>
+          <span class="mcp-badge badge-purple">{{ tools_count }} Citizen Tools Registered</span>
+          <span class="mcp-badge" style="background:#fff3cd; color:#856404; border:1px solid #ffeeba;">🔒 Zero Admin Leakage</span>
+        </div>
+      </div>
+      <div style="text-align: right;">
+        <a href="{{ issuer }}/mcp/admin" class="btn" style="background: #f7931e; color: #ffffff; text-decoration: none; font-weight: bold; padding: 10px 18px; border-radius: 6px; display: inline-block;">
+          Switch to Officer MCP →
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Endpoints & Quick Setup -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 28px;">
+    
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px;">
+      <h3 style="margin-top: 0; font-size: 16px; color: #0b3d6e; display: flex; align-items: center; gap: 8px;">
+        <span>🌐</span> Active Transports
+      </h3>
+      <div style="font-size: 13px; line-height: 1.8;">
+        <div><strong>Streamable HTTP:</strong> <code class="code-pill">{{ issuer }}/mcp/citizen</code></div>
+        <div><strong>SSE Stream:</strong> <code class="code-pill">{{ issuer }}/mcp/citizen/sse</code></div>
+        <div><strong>JSON-RPC Messages:</strong> <code class="code-pill">{{ issuer }}/mcp/citizen/messages</code></div>
+        <div><strong>Resource Metadata:</strong> <code class="code-pill">{{ issuer }}/mcp/citizen/.well-known/oauth-protected-resource</code></div>
+      </div>
+    </div>
+
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px;">
+      <h3 style="margin-top: 0; font-size: 16px; color: #0b3d6e; display: flex; align-items: center; gap: 8px;">
+        <span>⚙️</span> Claude Desktop / Agent Config
+      </h3>
+      <p style="font-size: 12px; color: #64748b; margin-top: 0;">Add this to your <code>claude_desktop_config.json</code>:</p>
+      <pre style="background: #0f172a; color: #e2e8f0; padding: 10px; border-radius: 6px; font-size: 11px; overflow-x: auto; margin: 0;">{
+  "mcpServers": {
+    "sewasetu-citizen": {
+      "url": "{{ issuer }}/mcp/citizen/sse"
+    }
+  }
+}</pre>
+    </div>
+
+  </div>
+
+  <!-- Tools Catalog Header -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <div>
+      <h2 style="margin: 0; color: #0b3d6e; font-size: 20px;">Available Citizen Tools ({{ tools|length }})</h2>
+      <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">Click <strong>"⚡ Try Live"</strong> on any tool to execute it directly against the live backend.</p>
+    </div>
+    <div>
+      <a href="{{ issuer }}/mcp/citizen?format=json" target="_blank" class="btn-outline" style="text-decoration: none;">
+        View Raw MCP JSON Schema ↗
+      </a>
+    </div>
+  </div>
+
+  <!-- Interactive Tools List -->
+  <div id="tools-container">
+    {% for tool in tools %}
+    <div class="tool-card" id="card-{{ tool.name }}">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+        <div style="flex: 1; min-width: 260px;">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+            <span style="font-size: 18px; color: #0b3d6e;">🔧</span>
+            <code style="font-size: 16px; font-weight: 700; color: #0b3d6e;">{{ tool.name }}</code>
+          </div>
+          <p style="margin: 0 0 10px 0; color: #334155; font-size: 14px; line-height: 1.5;">
+            {{ tool.description }}
+          </p>
+
+          <!-- Schema properties preview -->
+          {% if tool.inputSchema and tool.inputSchema.properties %}
+          <div style="font-size: 12px; color: #64748b;">
+            <strong>Parameters:</strong>
+            {% for param_name, param_info in tool.inputSchema.properties.items() %}
+              <span class="code-pill" style="margin-right: 4px;">{{ param_name }} ({{ param_info.type or 'string' }})</span>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div style="font-size: 12px; color: #64748b;">
+            <em>No parameters required.</em>
+          </div>
+          {% endif %}
+        </div>
+
+        <div>
+          <button class="btn-test" onclick="executeTool('{{ tool.name }}')">
+            <span>⚡</span> Try Live
+          </button>
+        </div>
+      </div>
+
+      <!-- Execution Result Output -->
+      <div id="result-{{ tool.name }}" class="result-box"></div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Footer Navigation Links -->
+  <div style="margin-top: 36px; padding: 20px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+    <div style="font-size: 13px; color: #64748b;">
+      Sewa Setu Old Age Pension Scheme · Department of Social Welfare, Government of Purvanchal
+    </div>
+    <div style="display: flex; gap: 16px; font-size: 13px; font-weight: 600;">
+      <a href="{{ issuer }}/" style="color: #0b3d6e; text-decoration: none;">Citizen Portal</a>
+      <a href="{{ issuer }}/eval-dashboard" style="color: #0b3d6e; text-decoration: none;">Evaluation Dashboard</a>
+      <a href="{{ issuer }}/__gateway/" style="color: #0b3d6e; text-decoration: none;">SMS Gateway</a>
+      <a href="{{ issuer }}/mcp/admin" style="color: #0b3d6e; text-decoration: none;">Officer MCP Console</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Preset sample payloads for quick live testing in the browser
+const TOOL_SAMPLES = {
+  "get_scheme_guidelines": {},
+  "check_eligibility": { "dob": "1958-04-12", "resident": true },
+  "send_citizen_otp": { "mobile": "9864012345" },
+  "verify_citizen_otp": { "mobile": "9864012345", "otp": "123456" },
+  "get_application_status": { "mobile": "9864012345" },
+  "get_acknowledgment": { "application_no": "SSP/2026/000001" },
+  "withdraw_pension_application": { "mobile": "9864012345", "otp": "123456", "reason": "Testing withdrawal" },
+  "submit_pension_application": {
+    "name": "Dhiren Gogoi",
+    "dob": "1959-04-12",
+    "gender": "MALE",
+    "village": "Sapekhati",
+    "block": "Borgaon",
+    "mobile": "9864012345",
+    "bank_account": "34567890123",
+    "ifsc": "SBIN0003077",
+    "otp": "123456"
+  }
+};
+
+async function executeTool(toolName) {
+  const resultEl = document.getElementById("result-" + toolName);
+  resultEl.style.display = "block";
+  resultEl.textContent = "⏳ Invoking " + toolName + " via JSON-RPC 2.0 over Streamable HTTP...";
+
+  const args = TOOL_SAMPLES[toolName] || {};
+
+  const payload = {
+    "jsonrpc": "2.0",
+    "id": Date.now(),
+    "method": "tools/call",
+    "params": {
+      "name": toolName,
+      "arguments": args
+    }
+  };
+
+  try {
+    const res = await fetch("{{ issuer }}/mcp/citizen", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    resultEl.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    resultEl.textContent = "❌ Error executing tool: " + err.message;
+  }
+}
+</script>
+{% endblock %}

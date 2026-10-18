@@ -31,7 +31,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 import jwt
-from flask import Blueprint, request, jsonify, Response, current_app
+from flask import Blueprint, request, jsonify, Response, current_app, render_template
 from pydantic import Field
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
@@ -875,9 +875,21 @@ def mcp_streamable_http():
     # If client asks for event stream on GET, delegate to SSE
     accept = request.headers.get("Accept", "")
     if request.method == "GET":
-        if "text/event-stream" in accept:
+        if "text/event-stream" in accept or request.args.get("sse"):
             return sse_connect(auth_mobile)
+
         tools = _get_sdk_tools_schema()
+
+        # If accessed by a web browser, render the rich Interactive MCP Explorer UI
+        if ("text/html" in accept or "application/xhtml+xml" in accept) and not request.args.get("format") == "json" and not request.args.get("json"):
+            return render_template(
+                "mcp_citizen_explorer.html",
+                tools=tools,
+                issuer=ISSUER,
+                auth_mobile=auth_mobile,
+                tools_count=len(tools)
+            )
+
         return jsonify({
             "service": "Sewa Setu Citizen MCP Server",
             "protocol": "Model Context Protocol (MCP)",
@@ -889,6 +901,7 @@ def mcp_streamable_http():
                 "messages": f"{ISSUER}/mcp/citizen/messages"
             },
             "tools_count": len(tools),
+            "tools": [{"name": t["name"], "description": t["description"]} for t in tools],
             "authenticated": auth_mobile is not None,
             "authenticated_mobile": auth_mobile
         })

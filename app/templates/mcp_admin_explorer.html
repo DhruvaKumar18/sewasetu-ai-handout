@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .mcp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .badge-green { background: #e6f9ed; color: #127538; border: 1px solid #b5e9c7; }
+  .badge-amber { background: #fff8e6; color: #b45309; border: 1px solid #fde68a; }
+  .badge-blue { background: #ebf5ff; color: #0056b3; border: 1px solid #b8daff; }
+  .tool-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: all 0.2s ease;
+  }
+  .tool-card:hover {
+    border-color: #b45309;
+    box-shadow: 0 4px 12px rgba(180,83,9,0.08);
+  }
+  .code-pill {
+    background: #f1f5f9;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    color: #0f172a;
+  }
+  .btn-test {
+    background: #b45309;
+    color: #ffffff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-test:hover { background: #92400e; color: #ffffff; }
+  .btn-outline {
+    background: transparent;
+    color: #0b3d6e;
+    border: 1px solid #0b3d6e;
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .result-box {
+    margin-top: 14px;
+    background: #0f172a;
+    color: #38bdf8;
+    padding: 14px;
+    border-radius: 8px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    overflow-x: auto;
+    max-height: 280px;
+    white-space: pre-wrap;
+    display: none;
+  }
+</style>
+
+<div style="max-width: 980px; margin: 20px auto; padding: 0 16px;">
+  
+  <!-- Header Banner -->
+  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 30px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12); border-left: 6px solid #f7931e;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+          <span style="font-size: 28px;">🏛️</span>
+          <h1 style="margin: 0; font-size: 26px; color: #ffffff; font-weight: 700;">Departmental Officer / Admin MCP Server</h1>
+        </div>
+        <p style="margin: 0 0 14px 0; color: #cbd5e1; font-size: 15px; max-width: 680px; line-height: 1.5;">
+          Privileged Model Context Protocol endpoint for Department of Social Welfare officers to review queues, approve or reject applications, audit SLA compliance, and trigger statutory deemed approvals.
+        </p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <span class="mcp-badge badge-green">● Officer Protocol Active</span>
+          <span class="mcp-badge badge-amber">🔒 Role: Protected Officer Realm</span>
+          <span class="mcp-badge badge-blue">{{ tools_count }} Officer Tools Registered</span>
+        </div>
+      </div>
+      <div>
+        <a href="{{ issuer }}/mcp/citizen" class="btn" style="background: #0b3d6e; color: #ffffff; text-decoration: none; font-weight: bold; padding: 10px 18px; border-radius: 6px; display: inline-block;">
+          ← Switch to Citizen MCP
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Endpoints & Auth Box -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 28px;">
+    
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px;">
+      <h3 style="margin-top: 0; font-size: 16px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+        <span>🌐</span> Active Officer Transports
+      </h3>
+      <div style="font-size: 13px; line-height: 1.8;">
+        <div><strong>Streamable HTTP:</strong> <code class="code-pill">{{ issuer }}/mcp/admin</code></div>
+        <div><strong>SSE Stream:</strong> <code class="code-pill">{{ issuer }}/mcp/admin/sse</code></div>
+        <div><strong>JSON-RPC Messages:</strong> <code class="code-pill">{{ issuer }}/mcp/admin/messages</code></div>
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
+          <label style="font-weight: 600; font-size: 12px; color: #475569; display: block; margin-bottom: 4px;">Bearer Token for Browser Testing:</label>
+          <input type="text" id="admin-token-input" value="sewasetu-admin-token-2026" 
+                 style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; font-family: monospace;">
+        </div>
+      </div>
+    </div>
+
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px;">
+      <h3 style="margin-top: 0; font-size: 16px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+        <span>⚙️</span> Claude Desktop / Agent Config
+      </h3>
+      <p style="font-size: 12px; color: #64748b; margin-top: 0;">Add this to your <code>claude_desktop_config.json</code>:</p>
+      <pre style="background: #0f172a; color: #e2e8f0; padding: 10px; border-radius: 6px; font-size: 11px; overflow-x: auto; margin: 0;">{
+  "mcpServers": {
+    "sewasetu-admin": {
+      "url": "{{ issuer }}/mcp/admin/sse",
+      "headers": {
+        "Authorization": "Bearer sewasetu-admin-token-2026"
+      }
+    }
+  }
+}</pre>
+    </div>
+
+  </div>
+
+  <!-- Tools Catalog Header -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <div>
+      <h2 style="margin: 0; color: #0f172a; font-size: 20px;">Available Officer Tools ({{ tools|length }})</h2>
+      <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">Execute tools using the configured Bearer token to inspect live data in real time.</p>
+    </div>
+    <div>
+      <a href="{{ issuer }}/mcp/admin?format=json" target="_blank" class="btn-outline" style="text-decoration: none;">
+        View Raw MCP JSON Schema ↗
+      </a>
+    </div>
+  </div>
+
+  <!-- Interactive Tools List -->
+  <div id="tools-container">
+    {% for tool in tools %}
+    <div class="tool-card" id="card-{{ tool.name }}">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+        <div style="flex: 1; min-width: 260px;">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+            <span style="font-size: 18px; color: #b45309;">⚖️</span>
+            <code style="font-size: 16px; font-weight: 700; color: #0f172a;">{{ tool.name }}</code>
+          </div>
+          <p style="margin: 0 0 10px 0; color: #334155; font-size: 14px; line-height: 1.5;">
+            {{ tool.description }}
+          </p>
+
+          {% if tool.inputSchema and tool.inputSchema.properties %}
+          <div style="font-size: 12px; color: #64748b;">
+            <strong>Parameters:</strong>
+            {% for param_name, param_info in tool.inputSchema.properties.items() %}
+              <span class="code-pill" style="margin-right: 4px;">{{ param_name }} ({{ param_info.type or 'string' }})</span>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div style="font-size: 12px; color: #64748b;">
+            <em>No parameters required.</em>
+          </div>
+          {% endif %}
+        </div>
+
+        <div>
+          <button class="btn-test" onclick="executeAdminTool('{{ tool.name }}')">
+            <span>⚡</span> Try Live
+          </button>
+        </div>
+      </div>
+
+      <div id="result-{{ tool.name }}" class="result-box"></div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Footer Navigation Links -->
+  <div style="margin-top: 36px; padding: 20px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+    <div style="font-size: 13px; color: #64748b;">
+      Department of Social Welfare, Government of Purvanchal · Officer Operations
+    </div>
+    <div style="display: flex; gap: 16px; font-size: 13px; font-weight: 600;">
+      <a href="{{ issuer }}/admin/dashboard" style="color: #0b3d6e; text-decoration: none;">Departmental Dashboard</a>
+      <a href="{{ issuer }}/eval-dashboard" style="color: #0b3d6e; text-decoration: none;">Evaluation Dashboard</a>
+      <a href="{{ issuer }}/mcp/citizen" style="color: #0b3d6e; text-decoration: none;">Citizen MCP Console</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const ADMIN_TOOL_SAMPLES = {
+  "get_admin_dashboard_stats": {},
+  "list_applications": { "status": "PENDING", "limit": 5 },
+  "get_application_details": { "application_no": "SSP/2026/000001" },
+  "approve_pension_application": { "application_no": "SSP/2026/000001", "note": "Eligible per field verification" },
+  "reject_pension_application": { "application_no": "SSP/2026/000001", "reason": "Age below statutory threshold" },
+  "trigger_deemed_approval": { "dry_run": true }
+};
+
+async function executeAdminTool(toolName) {
+  const resultEl = document.getElementById("result-" + toolName);
+  resultEl.style.display = "block";
+  resultEl.textContent = "⏳ Invoking " + toolName + " via JSON-RPC 2.0 with Bearer authentication...";
+
+  const token = document.getElementById("admin-token-input").value.trim();
+  const args = ADMIN_TOOL_SAMPLES[toolName] || {};
+
+  const payload = {
+    "jsonrpc": "2.0",
+    "id": Date.now(),
+    "method": "tools/call",
+    "params": {
+      "name": toolName,
+      "arguments": args
+    }
+  };
+
+  try {
+    const res = await fetch("{{ issuer }}/mcp/admin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": "Bearer " + token
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    resultEl.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    resultEl.textContent = "❌ Error executing tool: " + err.message;
+  }
+}
+</script>
+{% endblock %}
