@@ -44,8 +44,8 @@ app.secret_key = os.environ.get("SECRET_KEY") or config.get("app", "secret_key")
 # Two hours: elderly applicants fill the form slowly; the draft lives in the session.
 app.config["PERMANENT_SESSION_LIFETIME"] = 7200
 
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_USERNAME = (os.environ.get("ADMIN_USERNAME") or config.get("app", "admin_username", fallback="admin")).strip()
+ADMIN_PASSWORD = (os.environ.get("ADMIN_PASSWORD") or config.get("app", "admin_password", fallback="admin123")).strip()
 
 # An applicant may hold at most one application in these states at a time.
 # WITHDRAWN and REJECTED applications do not block a fresh application.
@@ -712,11 +712,14 @@ def reset_password():
 @app.route("/admin", methods=["GET", "POST"])
 def admin_login():
     if request.method == "POST":
-        if (ADMIN_PASSWORD and request.form.get("username") == ADMIN_USERNAME and
-                request.form.get("password") == ADMIN_PASSWORD):
+        username = (request.form.get("username") or "").strip()
+        password = (request.form.get("password") or "").strip()
+        expected_user = (ADMIN_USERNAME or "admin").strip()
+        expected_pass = (ADMIN_PASSWORD or "admin123").strip()
+        if username == expected_user and password == expected_pass:
             session["logged_in"] = True
             session["admin"] = True
-            session["admin_user"] = ADMIN_USERNAME
+            session["admin_user"] = expected_user
             return redirect(url_for("admin_dashboard"))
         flash("Invalid credentials.")
     return render_template("admin_login.html")

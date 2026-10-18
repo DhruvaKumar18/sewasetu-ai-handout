@@ -1,11 +1,35 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Departmental Login</h2>
-<form method="post">
-  <label>Username</label>
-  <input type="text" name="username">
-  <label>Password</label>
-  <input type="password" name="password">
-  <p><button class="btn" type="submit">Login</button></p>
-</form>
+<div style="max-width: 480px; margin: 30px auto; background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border-top: 5px solid #0b3d6e;">
+  <h2 style="margin-top: 0; color: #0b3d6e; font-size: 22px; display: flex; align-items: center; gap: 8px;">
+    <span>🏛️</span> Departmental Login
+  </h2>
+  <p style="color: #666; font-size: 14px; margin-bottom: 24px;">
+    Official access portal for Department of Social Welfare officers to review and decide pension applications.
+  </p>
+
+  <form method="post" autocomplete="on">
+    <div style="margin-bottom: 18px;">
+      <label style="display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; color: #333;">Username</label>
+      <input type="text" name="username" value="admin" required autofocus autocomplete="username"
+             style="width: 100%; padding: 10px 14px; border: 1.5px solid #ccc; border-radius: 6px; font-size: 15px; box-sizing: border-box;">
+    </div>
+
+    <div style="margin-bottom: 24px;">
+      <label style="display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; color: #333;">Password</label>
+      <input type="password" name="password" required autocomplete="current-password" placeholder="Enter password"
+             style="width: 100%; padding: 10px 14px; border: 1.5px solid #ccc; border-radius: 6px; font-size: 15px; box-sizing: border-box;">
+    </div>
+
+    <div style="background: #eef6ff; border-left: 4px solid #0b3d6e; padding: 10px 14px; border-radius: 4px; margin-bottom: 20px; font-size: 13px; color: #1e3a8a;">
+      <strong>Default Credentials:</strong><br>
+      Username: <code style="background: #dbeafe; padding: 2px 6px; border-radius: 3px;">admin</code> &nbsp;|&nbsp; 
+      Password: <code style="background: #dbeafe; padding: 2px 6px; border-radius: 3px;">admin123</code>
+    </div>
+
+    <button class="btn" type="submit" style="width: 100%; padding: 12px; background: #0b3d6e; color: #fff; font-size: 16px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s;">
+      Login to Dashboard
+    </button>
+  </form>
+</div>
 {% endblock %}

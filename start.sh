@@ -6,6 +6,10 @@ echo "=== Sewa Setu Cloud Startup ==="
 # Set default env vars if not provided
 export SMS_GATEWAY_URL=${SMS_GATEWAY_URL:-http://127.0.0.1:8025}
 export PORT=${PORT:-8000}
+export ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+export ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+export ADMIN_BEARER_TOKEN=${ADMIN_BEARER_TOKEN:-sewasetu-admin-token-2026}
+export CITIZEN_BEARER_TOKEN=${CITIZEN_BEARER_TOKEN:-sewasetu-citizen-token-2026}
 
 # 1. Initialize Database if needed (schema & seed)
 echo "[startup] Checking and initializing database..."
