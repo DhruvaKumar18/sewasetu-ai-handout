@@ -39,7 +39,7 @@ table.tbl td,table.tbl th{border:1px solid #ccd;padding:7px 10px;font-size:14px;
 {% block content %}{% endblock %}
 </div>
 <div class="footer">
-  <a href="/">Home</a> | <a href="/about">About the Scheme</a> | <a href="/status">Application Status</a> | <a href="/eval-dashboard">Evaluation Dashboard</a><br>
+  <a href="/">Home</a> | <a href="/about">About the Scheme</a> | <a href="/status">Application Status</a> | <a href="/eval-dashboard">Evaluation Dashboard</a>{% if session.get('logged_in') %} | <a href="/status?logout=1" style="color:#c62828; font-weight:bold;">Sign Out</a>{% endif %}<br>
   Department of Social Welfare, Government of Purvanchal.
 </div>
 </body>

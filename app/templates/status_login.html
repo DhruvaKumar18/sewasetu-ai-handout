@@ -1,28 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Application Status Portal</h2>
-<p class="steps">Check your application status, track processing SLA, download your official acknowledgment receipt, or
-  withdraw a pending application.</p>
+<p class="steps">Check your application status, track statutory SLA, download your official acknowledgment receipt, or withdraw a pending application.</p>
 
 <style>
   .login-tabs {
     display: flex;
     border-bottom: 2px solid #d7dbe0;
-    margin-bottom: 20px;
+    margin-bottom: 22px;
     gap: 8px;
   }
 
   .login-tab {
     padding: 10px 18px;
-    font-size: 14px;
+    font-size: 14.5px;
     font-weight: 600;
     cursor: pointer;
     background: #f0f2f5;
     border: 1px solid #d7dbe0;
     border-bottom: none;
-    border-radius: 4px 4px 0 0;
+    border-radius: 6px 6px 0 0;
     color: #4a5568;
     text-decoration: none;
+    transition: all 0.2s ease;
   }
 
   .login-tab.active {
@@ -40,14 +40,79 @@
     display: block;
   }
 
-  .otp-badge {
-    background: #e8f5e9;
-    border-left: 3px solid #2e7d32;
-    color: #1b5e20;
-    padding: 10px 14px;
-    margin-bottom: 16px;
-    border-radius: 0 4px 4px 0;
+  .otp-status-box {
+    padding: 11px 15px;
+    border-radius: 4px;
     font-size: 13.5px;
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  .otp-status-success {
+    background: #e8f5e9;
+    border-left: 4px solid #2e7d32;
+    color: #1b5e20;
+  }
+
+  .otp-status-error {
+    background: #ffebee;
+    border-left: 4px solid #c62828;
+    color: #b71c1c;
+  }
+
+  .mobile-input-group {
+    display: flex;
+    align-items: stretch;
+    max-width: 440px;
+    margin-top: 4px;
+  }
+
+  .mobile-prefix {
+    background: #e9ecef;
+    border: 1px solid #aab;
+    border-right: none;
+    padding: 9px 14px;
+    font-weight: 700;
+    font-size: 14.5px;
+    color: #333;
+    border-radius: 4px 0 0 4px;
+    display: flex;
+    align-items: center;
+  }
+
+  .mobile-input-field {
+    flex: 1;
+    border: 1px solid #aab;
+    border-radius: 0;
+    padding: 9px 12px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    margin: 0 !important;
+  }
+
+  .btn-get-otp {
+    background: #0b3d6e;
+    color: #fff;
+    border: 1px solid #0b3d6e;
+    border-left: none;
+    padding: 9px 16px;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    border-radius: 0 4px 4px 0;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+
+  .btn-get-otp:hover:not(:disabled) {
+    background: #0d4a85;
+  }
+
+  .btn-get-otp:disabled {
+    background: #8fa5bc;
+    border-color: #8fa5bc;
+    cursor: not-allowed;
   }
 </style>
 
@@ -58,76 +123,76 @@
     onclick="showTab('password')">&#128273; Login with Password (DOB)</button>
 </div>
 
-<!-- Tab 1: OTP Authentication (Default) -->
+<!-- Tab 1: Unified 1-Screen Mobile OTP Login -->
 <div id="tab-otp" class="tab-content {% if active_tab != 'password' %}active{% endif %}">
-  {% if otp_sent %}
-  <div class="otp-badge" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-    <div>&#10004; A 6-digit verification code has been sent to <b>+91 {{ mobile }}</b> via SMS.</div>
-    <a href="/status?change_mobile=1" style="color:#0b3d6e; font-weight:700; text-decoration:underline; font-size:13px;">&#9998; Change Mobile</a>
+  <p class="note" style="margin-bottom:16px;">
+    Enter your registered 10-digit mobile number, click <b>Get OTP</b>, and enter the 6-digit verification code to sign in instantly.
+  </p>
+
+  <div id="otpStatusBox" class="otp-status-box {% if otp_sent %}otp-status-success{% endif %}" {% if otp_sent %}style="display:block;"{% endif %}>
+    {% if otp_sent %}
+      &#10004; A 6-digit verification code has been sent to <b>+91 {{ mobile }}</b> via SMS.
+    {% endif %}
   </div>
-  <form method="post" action="/status">
+
+  <form method="post" action="/status" id="otpForm">
     <input type="hidden" name="action" value="verify_otp">
-    <input type="hidden" name="mobile" value="{{ mobile }}">
 
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
-      <label style="margin:0;">Registered Mobile Number</label>
-      <a href="/status?change_mobile=1" style="font-size:13px; color:#0b3d6e; font-weight:600; text-decoration:underline;">Change Number</a>
-    </div>
-    <div style="display:flex; gap:10px; align-items:center; margin-top:4px;">
-      <input type="text" value="+91 {{ mobile }}" disabled style="background:#e9ecef; flex:1; font-weight:bold; font-size:15px; margin:0;">
-      <a href="/status?change_mobile=1" class="btn" style="background:#6c757d; padding:8px 16px; font-size:13px; text-decoration:none; white-space:nowrap;">Change</a>
+    <label for="mobileInput">10-Digit Mobile Number</label>
+    <div class="mobile-input-group">
+      <span class="mobile-prefix">+91</span>
+      <input type="text" id="mobileInput" name="mobile" maxlength="10" placeholder="e.g. 9864012345"
+        value="{{ mobile or '' }}" required autofocus class="mobile-input-field" oninput="onMobileChanged()">
+      <button type="button" id="btnGetOtp" class="btn-get-otp" onclick="requestOtp()">Get OTP</button>
     </div>
 
-    <label style="margin-top:14px;">Enter 6-Digit OTP Code</label>
-    <input type="text" name="otp" maxlength="6" placeholder="e.g. 543210" autofocus required
-      style="letter-spacing:4px; font-weight:bold; font-size:18px;">
+    <div id="otpSection" style="margin-top:18px;">
+      <label for="otpCodeInput">6-Digit OTP Verification Code</label>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <input type="text" id="otpCodeInput" name="otp" maxlength="6" placeholder="e.g. 543210"
+          style="letter-spacing:5px; font-weight:bold; font-size:18px; max-width:220px; padding:9px 12px; margin:0;"
+          autocomplete="one-time-code" required>
+        <button type="button" id="btnResend" onclick="requestOtp()"
+          style="background:none; border:none; color:#0b3d6e; text-decoration:underline; cursor:pointer; font-size:13px; font-weight:bold; display:none;">Resend OTP</button>
+      </div>
+      <p class="note" style="margin-top:6px; color:#666;">
+        Simulated SMS gateway is visible at <a href="/__gateway/" target="_blank" style="color:#0b3d6e; font-weight:600;">/__gateway/</a>.
+      </p>
+    </div>
 
-    <p style="margin-top:16px;">
-      <button class="btn" type="submit">Verify &amp; View Application</button>
+    <p style="margin-top:22px;">
+      <button class="btn" type="submit" id="btnSubmitVerify" style="width:100%; max-width:440px; font-size:15.5px; padding:11px 22px;">
+        Verify &amp; View Application
+      </button>
     </p>
   </form>
-  <form method="post" action="/status" style="margin-top:12px;">
-    <input type="hidden" name="action" value="send_otp">
-    <input type="hidden" name="mobile" value="{{ mobile }}">
-    <p class="note">
-      Didn't receive the OTP? <button type="submit"
-        style="background:none; border:none; color:#0b3d6e; text-decoration:underline; cursor:pointer; padding:0; font-size:13px; font-weight:bold;">Resend OTP</button> &middot; <a href="/status?change_mobile=1" style="font-weight:bold; color:#0b3d6e;">Use Different Mobile Number</a>
-    </p>
-  </form>
-  {% else %}
-  <p class="note" style="margin-bottom:14px;">Enter your 10-digit mobile number to receive a one-time verification code
-    via SMS. No password required.</p>
-  <form method="post" action="/status">
-    <input type="hidden" name="action" value="send_otp">
-    <label>10-Digit Mobile Number</label>
-    <input type="text" name="mobile" maxlength="10" placeholder="e.g. 9864012345" value="{{ mobile or '' }}" required
-      autofocus>
-    <p style="margin-top:16px;">
-      <button class="btn" type="submit">Send OTP via SMS</button>
-    </p>
-  </form>
-  {% endif %}
 </div>
 
 <!-- Tab 2: Password Authentication -->
 <div id="tab-password" class="tab-content {% if active_tab == 'password' %}active{% endif %}">
-  <p class="note" style="margin-bottom:14px;">Sign in using your portal password. By default, your password is your date
-    of birth in <code>DDMMYYYY</code> format.</p>
+  <p class="note" style="margin-bottom:16px;">
+    Sign in using your portal password. By default, your password is your date of birth in <code>DDMMYYYY</code> format.
+  </p>
   <form method="post" action="/status">
     <input type="hidden" name="action" value="password_login">
-    <label>Mobile Number</label>
-    <input type="text" name="mobile" maxlength="10" placeholder="10-digit mobile number" value="{{ mobile or '' }}"
-      required>
-    <label>Password (DOB as DDMMYYYY)</label>
-    <input type="password" name="password" placeholder="e.g. DDMMYYYY" required>
-    <p style="margin-top:16px;">
-      <button class="btn" type="submit">Login with Password</button>
+    <label>10-Digit Mobile Number</label>
+    <input type="text" name="mobile" maxlength="10" placeholder="e.g. 9864012345" value="{{ mobile or '' }}" required>
+    
+    <label style="margin-top:14px;">Password (DOB as DDMMYYYY)</label>
+    <input type="password" name="password" placeholder="e.g. 15081958" required>
+    
+    <p style="margin-top:20px;">
+      <button class="btn" type="submit" style="width:100%; max-width:420px; font-size:15.5px; padding:11px 22px;">
+        Login with Password
+      </button>
     </p>
   </form>
-  <p class="note" style="margin-top:14px;"><a href="/status/reset">Forgot password? Reset via SMS</a></p>
+  <p class="note" style="margin-top:16px;"><a href="/status/reset">Forgot password? Reset via SMS</a></p>
 </div>
 
 <script>
+  var countdownInterval = null;
+
   function showTab(tabName) {
     document.querySelectorAll('.login-tab').forEach(function (el) {
       el.classList.remove('active');
@@ -143,5 +208,94 @@
       document.getElementById('tab-password').classList.add('active');
     }
   }
+
+  function setStatusBox(type, message) {
+    var box = document.getElementById('otpStatusBox');
+    box.className = 'otp-status-box ' + (type === 'success' ? 'otp-status-success' : 'otp-status-error');
+    box.innerHTML = (type === 'success' ? '&#10004; ' : '&#9888; ') + message;
+    box.style.display = 'block';
+  }
+
+  function onMobileChanged() {
+    var val = document.getElementById('mobileInput').value.replace(/\D/g, '');
+    document.getElementById('mobileInput').value = val;
+  }
+
+  function startCountdown(seconds) {
+    var btn = document.getElementById('btnGetOtp');
+    var resendBtn = document.getElementById('btnResend');
+    btn.disabled = true;
+    resendBtn.style.display = 'none';
+
+    var remaining = seconds;
+    btn.textContent = 'Resend in ' + remaining + 's';
+
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+    }
+
+    countdownInterval = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(countdownInterval);
+        btn.disabled = false;
+        btn.textContent = 'Get OTP';
+        resendBtn.style.display = 'inline-block';
+      } else {
+        btn.textContent = 'Resend in ' + remaining + 's';
+      }
+    }, 1000);
+  }
+
+  function requestOtp() {
+    var mobile = document.getElementById('mobileInput').value.trim();
+    if (!mobile || mobile.length !== 10 || !/^\d{10}$/.test(mobile)) {
+      setStatusBox('error', 'Please enter a valid 10-digit mobile number before requesting an OTP.');
+      document.getElementById('mobileInput').focus();
+      return;
+    }
+
+    var btn = document.getElementById('btnGetOtp');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    fetch('/api/send-status-otp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ mobile: mobile })
+    })
+    .then(function (res) {
+      return res.json().then(function (data) {
+        return { status: res.status, data: data };
+      });
+    })
+    .then(function (result) {
+      if (result.status === 200 && result.data.success) {
+        setStatusBox('success', '6-digit OTP sent to <b>+91 ' + mobile + '</b> via SMS. Please enter the code below.');
+        startCountdown(60);
+        document.getElementById('otpCodeInput').focus();
+      } else {
+        setStatusBox('error', result.data.message || 'Failed to send OTP. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Get OTP';
+      }
+    })
+    .catch(function (err) {
+      setStatusBox('error', 'Network error sending OTP. Please check your connection.');
+      btn.disabled = false;
+      btn.textContent = 'Get OTP';
+    });
+  }
+
+  // Auto-focus OTP if already sent by server
+  {% if otp_sent %}
+  window.addEventListener('DOMContentLoaded', function () {
+    startCountdown(60);
+    document.getElementById('otpCodeInput').focus();
+  });
+  {% endif %}
 </script>
 {% endblock %}

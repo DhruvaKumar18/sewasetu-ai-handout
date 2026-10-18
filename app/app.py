@@ -31,7 +31,7 @@ def now_ist():
 import requests
 import psycopg2
 from flask import (Flask, request, session, redirect, url_for, render_template,
-                   flash, send_file, abort)
+                   flash, send_file, abort, jsonify)
 from fpdf import FPDF
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -268,6 +268,8 @@ def apply():
     if deadline_remaining() is None:
         flash("The application window for this scheme has closed.")
         return redirect(url_for("index"))
+    if session.get("verified_mobile"):
+        return redirect(url_for("form_step", step=1))
     if request.method == "POST":
         mobile = request.form.get("mobile", "").strip()
         captcha = request.form.get("captcha", "")
@@ -456,8 +458,53 @@ def generate_acknowledgment(cur, app_id):
 # Status portal (citizen login)
 # ---------------------------------------------------------------------------
 
+@app.route("/api/send-status-otp", methods=["POST"])
+def api_send_status_otp():
+    data = request.get_json(silent=True) or request.form
+    mobile = (data.get("mobile") or "").strip()
+    if not mobile or len(mobile) != 10 or not mobile.isdigit():
+        return jsonify({"success": False, "message": "Please enter a valid 10-digit mobile number."}), 400
+
+    code = "%06d" % secrets.randbelow(1000000)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO otps (mobile, code, created_at) VALUES (%s, %s, %s)",
+                (mobile, code, datetime.now()))
+    conn.commit()
+    cur.close(); conn.close()
+
+    send_sms(mobile, f"Your Sewa Setu status login OTP is {code}. Valid for 5 minutes.")
+    session["status_otp_sent"] = True
+    session["status_otp_mobile"] = mobile
+    return jsonify({
+        "success": True,
+        "message": f"6-digit verification code sent to +91 {mobile} via SMS.",
+        "mobile": mobile
+    })
+
+
 @app.route("/status", methods=["GET", "POST"])
 def status_login():
+    if request.args.get("logout"):
+        session.pop("logged_in", None)
+        session.pop("portal_mobile", None)
+        session.pop("status_otp_sent", None)
+        session.pop("status_otp_mobile", None)
+        session.pop("verified_mobile", None)
+        flash("You have signed out successfully.")
+        return redirect(url_for("status_login"))
+
+    # If citizen is already logged in, show their application without prompting for OTP again
+    if session.get("logged_in") and session.get("portal_mobile") and not request.args.get("change_mobile") and not request.args.get("reset"):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM applications WHERE mobile = %s ORDER BY submitted_at DESC LIMIT 1",
+                    (session.get("portal_mobile"),))
+        r = cur.fetchone()
+        cur.close(); conn.close()
+        if r:
+            return redirect(url_for("view_application", app_id=r[0]))
+
     if request.args.get("change_mobile") or request.args.get("reset"):
         session.pop("status_otp_sent", None)
         session.pop("status_otp_mobile", None)
@@ -501,6 +548,9 @@ def status_login():
         elif action == "verify_otp" or request.form.get("otp"):
             active_tab = "otp"
             code = request.form.get("otp", "").strip()
+            if not code:
+                flash("Please click 'Get OTP' to receive your verification code, then enter the 6-digit OTP.")
+                return render_template("status_login.html", otp_sent=False, mobile=mobile, active_tab="otp")
             conn = get_db()
             cur = conn.cursor()
             cur.execute("SELECT code, created_at FROM otps WHERE mobile = %s "
@@ -519,6 +569,7 @@ def status_login():
                 session.pop("status_otp_mobile", None)
                 session["logged_in"] = True
                 session["portal_mobile"] = mobile
+                session["verified_mobile"] = mobile
 
                 conn = get_db()
                 cur = conn.cursor()
