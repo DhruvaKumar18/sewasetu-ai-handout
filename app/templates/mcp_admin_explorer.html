@@ -248,10 +248,19 @@
       <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">Execute tools using the configured Bearer token to inspect live data in real time.</p>
     </div>
     <div>
-      <a href="{{ issuer }}/mcp/admin?format=json" target="_blank" class="btn-outline" style="text-decoration: none;">
-        View Raw MCP JSON Schema ↗
-      </a>
+      <button onclick="toggleAdminRawJson()" class="btn-outline">
+        <span>{ }</span> View Raw MCP JSON Schema
+      </button>
     </div>
+  </div>
+
+  <!-- Expandable Raw JSON Schema Box -->
+  <div id="admin-raw-json-container" style="display: {% if format_json %}block{% else %}none{% endif %}; background: #0f172a; color: #38bdf8; padding: 18px; border-radius: 8px; font-family: monospace; font-size: 12px; max-height: 350px; overflow: auto; margin-bottom: 24px; box-shadow: inset 0 2px 6px rgba(0,0,0,0.3);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #334155; padding-bottom: 6px;">
+      <span style="color: #94a3b8; font-weight: bold;">Machine-Readable Admin MCP Service & Tools Schema (JSON)</span>
+      <button onclick="navigator.clipboard.writeText(document.getElementById('admin-raw-json-pre').textContent); alert('JSON schema copied to clipboard!');" style="background: #1e293b; color: #38bdf8; border: 1px solid #475569; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;">📋 Copy JSON</button>
+    </div>
+    <pre style="margin: 0; white-space: pre-wrap;" id="admin-raw-json-pre">Loading JSON schema...</pre>
   </div>
 
   <!-- Interactive Tools List -->
@@ -395,8 +404,35 @@ const ADMIN_TOOL_SAMPLES = {
   "get_application_details": { "application_no": "SSP/2026/000001" },
   "approve_pension_application": { "application_no": "SSP/2026/000001", "note": "Eligible per field verification" },
   "reject_pension_application": { "application_no": "SSP/2026/000001", "reason": "Age below statutory threshold" },
-  "trigger_deemed_approval": { "dry_run": true }
+  "trigger_deemed_approval": { "dry_run": true },
+  "ask_admin_question": { "question": "Show pending applications in Borgaon" }
 };
+
+function toggleAdminRawJson() {
+  const box = document.getElementById("admin-raw-json-container");
+  if (box.style.display === "none" || !box.style.display) {
+    box.style.display = "block";
+    loadAdminRawJson();
+  } else {
+    box.style.display = "none";
+  }
+}
+
+async function loadAdminRawJson() {
+  try {
+    const res = await fetch("{{ issuer }}/mcp/admin", {
+      headers: { "Accept": "application/json" }
+    });
+    const data = await res.json();
+    document.getElementById("admin-raw-json-pre").textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    document.getElementById("admin-raw-json-pre").textContent = "Error loading schema: " + err.message;
+  }
+}
+
+{% if format_json %}
+window.addEventListener("DOMContentLoaded", loadAdminRawJson);
+{% endif %}
 
 async function executeAdminTool(toolName) {
   const resultEl = document.getElementById("result-" + toolName);

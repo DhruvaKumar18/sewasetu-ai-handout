@@ -1,0 +1,7 @@
+pgdata_local/
+uploads/
+DIRECTOR-NOTE.mp3
+.git/
+__pycache__/
+*.pyc
+*.log

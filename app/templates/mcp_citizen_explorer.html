@@ -270,10 +270,19 @@
       <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">Underlying MCP tools exposed over JSON-RPC 2.0 to LLM clients.</p>
     </div>
     <div>
-      <a href="{{ issuer }}/mcp/citizen?format=json" target="_blank" class="btn-outline" style="text-decoration: none;">
-        View Raw JSON Schema ↗
-      </a>
+      <button onclick="toggleRawJson()" class="btn-outline">
+        <span>{ }</span> View Raw JSON Schema
+      </button>
     </div>
+  </div>
+
+  <!-- Expandable Raw JSON Schema Box -->
+  <div id="raw-json-container" style="display: {% if format_json %}block{% else %}none{% endif %}; background: #0f172a; color: #38bdf8; padding: 18px; border-radius: 8px; font-family: monospace; font-size: 12px; max-height: 350px; overflow: auto; margin-bottom: 24px; box-shadow: inset 0 2px 6px rgba(0,0,0,0.3);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #334155; padding-bottom: 6px;">
+      <span style="color: #94a3b8; font-weight: bold;">Machine-Readable MCP Service & Tools Schema (JSON)</span>
+      <button onclick="navigator.clipboard.writeText(document.getElementById('raw-json-pre').textContent); alert('JSON schema copied to clipboard!');" style="background: #1e293b; color: #38bdf8; border: 1px solid #475569; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;">📋 Copy JSON</button>
+    </div>
+    <pre style="margin: 0; white-space: pre-wrap;" id="raw-json-pre">Loading JSON schema...</pre>
   </div>
 
   <!-- Interactive Tools List -->
@@ -443,8 +452,37 @@ const TOOL_SAMPLES = {
     "bank_account": "34567890123",
     "ifsc": "SBIN0003077",
     "otp": "123456"
+  },
+  "ask_question": {
+    "question": "Am I eligible for pension? I was born on 12/04/1959 in Borgaon."
   }
 };
+
+function toggleRawJson() {
+  const box = document.getElementById("raw-json-container");
+  if (box.style.display === "none" || !box.style.display) {
+    box.style.display = "block";
+    loadRawJson();
+  } else {
+    box.style.display = "none";
+  }
+}
+
+async function loadRawJson() {
+  try {
+    const res = await fetch("{{ issuer }}/mcp/citizen", {
+      headers: { "Accept": "application/json" }
+    });
+    const data = await res.json();
+    document.getElementById("raw-json-pre").textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    document.getElementById("raw-json-pre").textContent = "Error loading schema: " + err.message;
+  }
+}
+
+{% if format_json %}
+window.addEventListener("DOMContentLoaded", loadRawJson);
+{% endif %}
 
 async function executeTool(toolName) {
   const resultEl = document.getElementById("result-" + toolName);

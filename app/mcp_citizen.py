@@ -625,6 +625,24 @@ def get_acknowledgment(
     }
 
 
+@citizen_mcp.tool(
+    name="ask_question",
+    description=(
+        "Ask any question in natural language about Sewa Setu Old Age Pension Scheme: eligibility, "
+        "status of application, required documents, bank details, blocks, or general guidance. "
+        "The AI assistant interprets the intent and retrieves verified live data."
+    )
+)
+def ask_question(
+    question: str = Field(..., description="The citizen's question in natural language (e.g. 'Am I eligible if born in 1959?', 'Check status for 9864012345')"),
+    mobile: Optional[str] = Field(None, description="Optional 10-digit applicant mobile number for personalized context")
+) -> dict:
+    import mcp_agent
+    eff_mobile = CURRENT_AUTH_CITIZEN.get() or (mobile or "").strip()
+    session = {"mobile": eff_mobile} if eff_mobile else {}
+    return mcp_agent.process_citizen_query(question, session_data=session)
+
+
 def _clean_args(fn, args):
     import inspect
     from pydantic.fields import FieldInfo
@@ -662,6 +680,7 @@ TOOL_HANDLERS = {
     "get_application_status": _make_citizen_handler(get_application_status),
     "withdraw_pension_application": _make_citizen_handler(withdraw_pension_application),
     "get_acknowledgment": _make_citizen_handler(get_acknowledgment),
+    "ask_question": _make_citizen_handler(ask_question),
 }
 CITIZEN_TOOL_HANDLERS = TOOL_HANDLERS
 
@@ -830,6 +849,18 @@ def handle_jsonrpc_request(req_data: Any, auth_mobile: Optional[str]) -> Optiona
         finally:
             CURRENT_AUTH_CITIZEN.reset(cv_token)
 
+    # 4. Interactive Natural Language Query method (MCP Extension)
+    elif method in ("query", "ask", "chat"):
+        q = params.get("query") or params.get("question") or params.get("message") or ""
+        import mcp_agent
+        session_data = {"mobile": auth_mobile} if auth_mobile else {}
+        answer_data = mcp_agent.process_citizen_query(q, session_data=session_data)
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": answer_data
+        }
+
     else:
         if is_notification:
             return None
@@ -871,7 +902,7 @@ def mcp_streamable_http():
     """
     Public Streamable HTTP endpoint for Citizen MCP.
     - GET: Returns service info or initiates SSE stream if requested.
-    - POST: Streamable HTTP JSON-RPC 2.0 endpoint (single or batch).
+    - POST: Streamable HTTP JSON-RPC 2.0 endpoint (single or batch) or direct query.
     """
     auth_mobile = get_authenticated_citizen(request)
 
@@ -881,16 +912,25 @@ def mcp_streamable_http():
         if "text/event-stream" in accept or request.args.get("sse"):
             return sse_connect(auth_mobile)
 
+        # Direct GET query support (e.g. ?query=Am+I+eligible or ?q=...)
+        q_param = request.args.get("query") or request.args.get("q") or request.args.get("question")
+        if q_param:
+            import mcp_agent
+            session_data = {"mobile": auth_mobile} if auth_mobile else {}
+            return jsonify(mcp_agent.process_citizen_query(q_param, session_data=session_data))
+
         tools = _get_sdk_tools_schema()
 
         # If accessed by a web browser, render the rich Interactive MCP Explorer UI
-        if ("text/html" in accept or "application/xhtml+xml" in accept) and not request.args.get("format") == "json" and not request.args.get("json"):
+        # Web browsers send Accept with text/html. They should ALWAYS see the chat explorer!
+        if ("text/html" in accept or "application/xhtml+xml" in accept):
             return render_template(
                 "mcp_citizen_explorer.html",
                 tools=tools,
                 issuer=ISSUER,
                 auth_mobile=auth_mobile,
-                tools_count=len(tools)
+                tools_count=len(tools),
+                format_json=(request.args.get("format") == "json" or request.args.get("raw") == "1")
             )
 
         return jsonify({
@@ -901,7 +941,8 @@ def mcp_streamable_http():
             "transports": {
                 "streamable_http": f"{ISSUER}/mcp/citizen",
                 "sse": f"{ISSUER}/mcp/citizen/sse",
-                "messages": f"{ISSUER}/mcp/citizen/messages"
+                "messages": f"{ISSUER}/mcp/citizen/messages",
+                "query": f"{ISSUER}/mcp/citizen/query"
             },
             "tools_count": len(tools),
             "tools": [{"name": t["name"], "description": t["description"]} for t in tools],
@@ -909,7 +950,7 @@ def mcp_streamable_http():
             "authenticated_mobile": auth_mobile
         })
 
-    # POST: JSON-RPC 2.0 over Streamable HTTP
+    # POST: JSON-RPC 2.0 over Streamable HTTP or Direct Query
     body = request.get_json(silent=True)
     if body is None:
         return jsonify({
@@ -917,6 +958,13 @@ def mcp_streamable_http():
             "id": None,
             "error": {"code": -32700, "message": "Parse error: invalid JSON"}
         }), 400
+
+    # Direct query fallback: {"query": "..."} without JSON-RPC envelope
+    if isinstance(body, dict) and ("query" in body or "question" in body or "message" in body) and "method" not in body:
+        q = body.get("query") or body.get("question") or body.get("message") or ""
+        import mcp_agent
+        session_data = {"mobile": auth_mobile} if auth_mobile else {}
+        return jsonify(mcp_agent.process_citizen_query(q, session_data=session_data))
 
     # Ensure a session id is assigned/maintained
     session_id = request.headers.get("Mcp-Session-Id") or secrets.token_hex(16)
@@ -1000,6 +1048,16 @@ def mcp_messages():
             "id": None,
             "error": {"code": -32700, "message": "Parse error"}
         }), 400
+
+    # Direct query fallback
+    if isinstance(body, dict) and ("query" in body or "question" in body or "message" in body) and "method" not in body:
+        q = body.get("query") or body.get("question") or body.get("message") or ""
+        import mcp_agent
+        session_data_dict = {"mobile": auth_mobile} if auth_mobile else {}
+        resp = mcp_agent.process_citizen_query(q, session_data=session_data_dict)
+        if session_data:
+            session_data["queue"].put(resp)
+        return jsonify(resp)
 
     if isinstance(body, list):
         responses = [handle_jsonrpc_request(item, auth_mobile) for item in body]

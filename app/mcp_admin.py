@@ -528,6 +528,21 @@ def trigger_deemed_approval() -> dict:
     }
 
 
+@admin_mcp.tool(
+    name="ask_admin_question",
+    description=(
+        "Ask any administrative question in natural language about block statistics, pending applications, "
+        "SLA overdue cases, or deemed approval status. Answers with live database verification."
+    )
+)
+def ask_admin_question(
+    question: str = Field(..., description="The officer's question in natural language (e.g. 'Show pending cases in Borgaon', 'How many are pending?')")
+) -> dict:
+    import mcp_agent
+    actor = CURRENT_ADMIN_ACTOR.get()
+    return mcp_agent.process_admin_query(question, actor=actor)
+
+
 def _get_admin_sdk_tools_schema() -> List[Dict[str, Any]]:
     """Helper to retrieve JSON schema for all registered admin tools from the MCP SDK."""
     tools = asyncio.run(admin_mcp.list_tools())
@@ -580,6 +595,7 @@ ADMIN_TOOL_HANDLERS = {
     "approve_pension_application": _make_admin_handler(approve_pension_application),
     "reject_pension_application": _make_admin_handler(reject_pension_application),
     "trigger_deemed_approval": _make_admin_handler(trigger_deemed_approval),
+    "ask_admin_question": _make_admin_handler(ask_admin_question),
 }
 
 
@@ -745,6 +761,17 @@ def handle_admin_jsonrpc_request(req_data: Any, actor: Optional[str]) -> Optiona
         finally:
             CURRENT_ADMIN_ACTOR.reset(cv_token)
 
+    # 4. Interactive Administrative Query method (MCP Extension)
+    elif method in ("query", "ask", "chat"):
+        q = params.get("query") or params.get("question") or params.get("message") or ""
+        import mcp_agent
+        answer_data = mcp_agent.process_admin_query(q, actor=actor)
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": answer_data
+        }
+
     else:
         if is_notification:
             return None
@@ -773,7 +800,7 @@ def mcp_admin_streamable_http():
     """
     Streamable HTTP endpoint for Departmental Admin / Block Officer MCP.
     - GET: Returns service info or SSE stream if requested.
-    - POST: Standard Streamable HTTP JSON-RPC 2.0 endpoint.
+    - POST: Standard Streamable HTTP JSON-RPC 2.0 endpoint or direct query.
     """
     actor = verify_admin_auth(request)
 
@@ -782,16 +809,23 @@ def mcp_admin_streamable_http():
         if "text/event-stream" in accept or request.args.get("sse"):
             return sse_admin_connect(actor)
 
+        # Direct GET query support (e.g. ?query=pending+in+Borgaon)
+        q_param = request.args.get("query") or request.args.get("q") or request.args.get("question")
+        if q_param:
+            import mcp_agent
+            return jsonify(mcp_agent.process_admin_query(q_param, actor=actor or "admin"))
+
         tools = _get_admin_sdk_tools_schema()
 
         # If accessed by a web browser, render the rich Interactive Admin MCP Explorer UI
-        if ("text/html" in accept or "application/xhtml+xml" in accept) and not request.args.get("format") == "json" and not request.args.get("json"):
+        if ("text/html" in accept or "application/xhtml+xml" in accept):
             return render_template(
                 "mcp_admin_explorer.html",
                 tools=tools,
                 issuer=ISSUER,
                 actor=actor,
-                tools_count=len(tools)
+                tools_count=len(tools),
+                format_json=(request.args.get("format") == "json" or request.args.get("raw") == "1")
             )
 
         return jsonify({
@@ -806,14 +840,15 @@ def mcp_admin_streamable_http():
             "transports": {
                 "streamable_http": f"{ISSUER}/mcp/admin",
                 "sse": f"{ISSUER}/mcp/admin/sse",
-                "messages": f"{ISSUER}/mcp/admin/messages"
+                "messages": f"{ISSUER}/mcp/admin/messages",
+                "query": f"{ISSUER}/mcp/admin/query"
             },
             "tools_count": len(tools),
             "tools": [{"name": t["name"], "description": t["description"]} for t in tools],
             "auth_guidance": "Pass 'Authorization: Bearer <admin-token>' (default token: sewasetu-admin-token-2026 or portal admin password)"
         })
 
-    # POST: JSON-RPC 2.0
+    # POST: JSON-RPC 2.0 or Direct Natural Language Query
     body = request.get_json(silent=True)
     if body is None:
         return jsonify({
@@ -821,6 +856,12 @@ def mcp_admin_streamable_http():
             "id": None,
             "error": {"code": -32700, "message": "Parse error: invalid JSON"}
         }), 400
+
+    # Direct query fallback: {"query": "..."} without JSON-RPC envelope
+    if isinstance(body, dict) and ("query" in body or "question" in body or "message" in body) and "method" not in body:
+        q = body.get("query") or body.get("question") or body.get("message") or ""
+        import mcp_agent
+        return jsonify(mcp_agent.process_admin_query(q, actor=actor or "admin"))
 
     session_id = request.headers.get("Mcp-Session-Id") or secrets.token_hex(16)
 
@@ -899,6 +940,15 @@ def mcp_admin_messages():
             "id": None,
             "error": {"code": -32700, "message": "Parse error"}
         }), 400
+
+    # Direct query fallback
+    if isinstance(body, dict) and ("query" in body or "question" in body or "message" in body) and "method" not in body:
+        q = body.get("query") or body.get("question") or body.get("message") or ""
+        import mcp_agent
+        resp = mcp_agent.process_admin_query(q, actor=actor or "admin")
+        if session_data:
+            session_data["queue"].put(resp)
+        return jsonify(resp)
 
     if isinstance(body, list):
         responses = [handle_admin_jsonrpc_request(item, actor) for item in body]
