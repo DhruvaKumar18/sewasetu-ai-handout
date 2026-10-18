@@ -59,6 +59,50 @@
     font-size: 13px;
     cursor: pointer;
   }
+  .chip-btn {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 13px;
+    color: #1e293b;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .chip-btn:hover {
+    background: #fef3c7;
+    border-color: #d97706;
+    color: #92400e;
+  }
+  .chat-bubble-user {
+    background: #b45309;
+    color: #ffffff;
+    padding: 12px 18px;
+    border-radius: 14px 14px 2px 14px;
+    margin-left: auto;
+    max-width: 80%;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  .chat-bubble-ai {
+    background: #ffffff;
+    color: #1e293b;
+    border: 1px solid #e2e8f0;
+    padding: 16px 20px;
+    border-radius: 14px 14px 14px 2px;
+    margin-right: auto;
+    max-width: 88%;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
   .result-box {
     margin-top: 14px;
     background: #0f172a;
@@ -77,20 +121,20 @@
 <div style="max-width: 980px; margin: 20px auto; padding: 0 16px;">
   
   <!-- Header Banner -->
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 30px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12); border-left: 6px solid #f7931e;">
+  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 28px 32px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12); border-left: 6px solid #f7931e;">
     <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
       <div>
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
           <span style="font-size: 28px;">🏛️</span>
-          <h1 style="margin: 0; font-size: 26px; color: #ffffff; font-weight: 700;">Departmental Officer / Admin MCP Server</h1>
+          <h1 style="margin: 0; font-size: 24px; color: #ffffff; font-weight: 700;">Departmental Officer / Admin MCP Server</h1>
         </div>
-        <p style="margin: 0 0 14px 0; color: #cbd5e1; font-size: 15px; max-width: 680px; line-height: 1.5;">
-          Privileged Model Context Protocol endpoint for Department of Social Welfare officers to review queues, approve or reject applications, audit SLA compliance, and trigger statutory deemed approvals.
+        <p style="margin: 0 0 14px 0; color: #cbd5e1; font-size: 14.5px; max-width: 680px; line-height: 1.5;">
+          Privileged Model Context Protocol assistant for Department of Social Welfare officers. Inspect application queues, review applicant dossiers, audit SLA compliance, and trigger statutory deemed approvals.
         </p>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <span class="mcp-badge badge-green">● Officer Protocol Active</span>
+          <span class="mcp-badge badge-green">● Officer Agent Online</span>
           <span class="mcp-badge badge-amber">🔒 Role: Protected Officer Realm</span>
-          <span class="mcp-badge badge-blue">{{ tools_count }} Officer Tools Registered</span>
+          <span class="mcp-badge badge-blue">{{ tools_count }} Tools Registered</span>
         </div>
       </div>
       <div>
@@ -99,6 +143,64 @@
         </a>
       </div>
     </div>
+  </div>
+
+  <!-- INTERACTIVE OFFICER QUERY ASSISTANT (CHAT INTERFACE) -->
+  <div style="background: #fdfbf7; border: 2px solid #b45309; border-radius: 12px; padding: 24px; margin-bottom: 28px; box-shadow: 0 4px 16px rgba(180,83,9,0.06);">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid #fde68a; padding-bottom: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 24px;">⚖️</span>
+        <div>
+          <h2 style="margin: 0; font-size: 18px; color: #92400e;">Ask the Officer Decision Assistant</h2>
+          <span style="font-size: 12.5px; color: #78350f;">Automated departmental intelligence & queue queries via Admin MCP tools</span>
+        </div>
+      </div>
+      <div>
+        <button onclick="clearAdminChat()" style="background: transparent; border: none; color: #94a3b8; font-size: 12px; cursor: pointer;">
+          Clear Chat
+        </button>
+      </div>
+    </div>
+
+    <!-- Chat Message History -->
+    <div id="admin-chat-history" style="max-height: 380px; overflow-y: auto; padding: 10px 4px; margin-bottom: 16px;">
+      <div class="chat-bubble-ai">
+        <div style="font-weight: 700; color: #92400e; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+          <span>⚖️</span> Officer Decision Assistant
+        </div>
+        <div>
+          Welcome Officer! I can help you monitor block queues, inspect application dossiers, audit SLA breaches, and report live departmental metrics.
+        </div>
+      </div>
+    </div>
+
+    <!-- Suggestion Prompt Chips -->
+    <div style="margin-bottom: 14px;">
+      <div style="font-size: 12px; font-weight: 600; color: #78350f; margin-bottom: 8px;">Quick Administrative Prompts:</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <button class="chip-btn" onclick="sendAdminPrompt('Show departmental dashboard summary and status counts')">
+          📊 Dashboard Summary
+        </button>
+        <button class="chip-btn" onclick="sendAdminPrompt('List pending applications awaiting review in Borgaon block')">
+          📋 List Pending (Borgaon)
+        </button>
+        <button class="chip-btn" onclick="sendAdminPrompt('Audit overdue applications beyond 15-day SLA and check deemed approvals')">
+          ⏳ Audit SLA Breaches
+        </button>
+        <button class="chip-btn" onclick="sendAdminPrompt('Get details for application SSP/2026/000001')">
+          🔍 Inspect SSP/2026/000001
+        </button>
+      </div>
+    </div>
+
+    <!-- Query Input Bar -->
+    <form id="admin-chat-form" onsubmit="handleAdminChatSubmit(event)" style="display: flex; gap: 10px;">
+      <input type="text" id="admin-query-input" placeholder="Ask about queues, stats, or dossiers... (e.g. How many applications are overdue SLA?)"
+             style="flex: 1; padding: 12px 16px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 15px; outline: none;">
+      <button type="submit" class="btn" style="background: #b45309; color: #ffffff; font-weight: 700; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+        <span>Query</span> 🚀
+      </button>
+    </form>
   </div>
 
   <!-- Endpoints & Auth Box -->
@@ -111,9 +213,9 @@
       <div style="font-size: 13px; line-height: 1.8;">
         <div><strong>Streamable HTTP:</strong> <code class="code-pill">{{ issuer }}/mcp/admin</code></div>
         <div><strong>SSE Stream:</strong> <code class="code-pill">{{ issuer }}/mcp/admin/sse</code></div>
-        <div><strong>JSON-RPC Messages:</strong> <code class="code-pill">{{ issuer }}/mcp/admin/messages</code></div>
-        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
-          <label style="font-weight: 600; font-size: 12px; color: #475569; display: block; margin-bottom: 4px;">Bearer Token for Browser Testing:</label>
+        <div><strong>Interactive Query API:</strong> <code class="code-pill">{{ issuer }}/mcp/admin/query</code></div>
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0;">
+          <label style="font-weight: 600; font-size: 12px; color: #475569; display: block; margin-bottom: 4px;">Bearer Token for Requests:</label>
           <input type="text" id="admin-token-input" value="sewasetu-admin-token-2026" 
                  style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; font-family: monospace;">
         </div>
@@ -182,7 +284,7 @@
 
         <div>
           <button class="btn-test" onclick="executeAdminTool('{{ tool.name }}')">
-            <span>⚡</span> Try Live
+            <span>⚡</span> Try Tool
           </button>
         </div>
       </div>
@@ -207,6 +309,86 @@
 </div>
 
 <script>
+// Admin Chat Handling
+function handleAdminChatSubmit(e) {
+  e.preventDefault();
+  const input = document.getElementById("admin-query-input");
+  const query = input.value.trim();
+  if (!query) return;
+  sendAdminPrompt(query);
+  input.value = "";
+}
+
+function sendAdminPrompt(text) {
+  const history = document.getElementById("admin-chat-history");
+  const token = document.getElementById("admin-token-input").value.trim();
+
+  const userDiv = document.createElement("div");
+  userDiv.className = "chat-bubble-user";
+  userDiv.textContent = text;
+  history.appendChild(userDiv);
+
+  const aiLoadingDiv = document.createElement("div");
+  aiLoadingDiv.className = "chat-bubble-ai";
+  aiLoadingDiv.innerHTML = "<div style='color:#78350f;'><em>⏳ Analyzing administrative query & invoking Admin MCP tool...</em></div>";
+  history.appendChild(aiLoadingDiv);
+  history.scrollTop = history.scrollHeight;
+
+  fetch("{{ issuer }}/mcp/admin/query", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + token
+    },
+    body: JSON.stringify({ query: text })
+  })
+  .then(res => res.json())
+  .then(data => {
+    aiLoadingDiv.remove();
+    const aiDiv = document.createElement("div");
+    aiDiv.className = "chat-bubble-ai";
+
+    let toolBanner = "";
+    if (data.tool_called) {
+      toolBanner = `<div style="display:inline-flex; align-items:center; gap:6px; background:#fef3c7; color:#92400e; border:1px solid #fde68a; padding:4px 10px; border-radius:6px; font-size:12px; font-family:monospace; font-weight:600; margin-bottom:10px;">⚖️ Invoked Admin Tool: ${data.tool_called}(${JSON.stringify(data.tool_args || {})})</div>`;
+    }
+
+    let formattedAnswer = (data.answer || "Request processed.")
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>');
+
+    aiDiv.innerHTML = `
+      <div style="font-weight:700; color:#92400e; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+        <span>⚖️</span> Officer Decision Assistant
+      </div>
+      ${toolBanner}
+      <div>${formattedAnswer}</div>
+    `;
+    history.appendChild(aiDiv);
+    history.scrollTop = history.scrollHeight;
+  })
+  .catch(err => {
+    aiLoadingDiv.remove();
+    const errDiv = document.createElement("div");
+    errDiv.className = "chat-bubble-ai";
+    errDiv.innerHTML = `<span style="color:#b91c1c;">❌ Error communicating with assistant: ${err.message}</span>`;
+    history.appendChild(errDiv);
+    history.scrollTop = history.scrollHeight;
+  });
+}
+
+function clearAdminChat() {
+  document.getElementById("admin-chat-history").innerHTML = `
+    <div class="chat-bubble-ai">
+      <div style="font-weight: 700; color: #92400e; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+        <span>⚖️</span> Officer Decision Assistant
+      </div>
+      <div>Chat cleared. How can I assist you with queues and decisions?</div>
+    </div>
+  `;
+}
+
+// Tool Testing
 const ADMIN_TOOL_SAMPLES = {
   "get_admin_dashboard_stats": {},
   "list_applications": { "status": "PENDING", "limit": 5 },

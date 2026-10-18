@@ -39,6 +39,16 @@ from mcp.types import Tool, TextContent, CallToolResult
 
 mcp_citizen = Blueprint("mcp_citizen", __name__)
 
+
+@mcp_citizen.after_request
+def _cors_headers(resp):
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Headers"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    resp.headers["Access-Control-Expose-Headers"] = "Mcp-Session-Id"
+    return resp
+
+
 import app as portal
 from oauth import ISSUER, signing_key, mint_access_token, SESSION
 
@@ -834,13 +844,6 @@ def handle_jsonrpc_request(req_data: Any, auth_mobile: Optional[str]) -> Optiona
 # HTTP & SSE Transports
 # ---------------------------------------------------------------------------
 
-@mcp_citizen.after_request
-def _cors_headers(resp):
-    resp.headers["Access-Control-Allow-Origin"] = "*"
-    resp.headers["Access-Control-Allow-Headers"] = "*"
-    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    resp.headers["Access-Control-Expose-Headers"] = "Mcp-Session-Id"
-    return resp
 
 
 @mcp_citizen.route("/mcp/citizen", methods=["OPTIONS"])
@@ -1012,3 +1015,21 @@ def mcp_messages():
         if resp is None:
             return ("", 204)
         return jsonify(resp)
+
+
+@mcp_citizen.route("/mcp/citizen/query", methods=["POST", "OPTIONS"])
+def mcp_citizen_query_endpoint():
+    """
+    Interactive natural language AI Assistant query endpoint for citizens.
+    Interprets intent, automatically invokes the relevant MCP tool, and returns conversational response.
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    data = request.get_json(silent=True) or {}
+    query_text = (data.get("query") or "").strip()
+    if not query_text:
+        return jsonify({"error": "Query cannot be empty"}), 400
+
+    import mcp_agent
+    res = mcp_agent.process_citizen_query(query_text, session_data=data)
+    return jsonify(res)

@@ -35,6 +35,16 @@ from mcp.types import Tool, TextContent, CallToolResult
 
 mcp_admin = Blueprint("mcp_admin", __name__)
 
+
+@mcp_admin.after_request
+def _admin_cors_headers(resp):
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Headers"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    resp.headers["Access-Control-Expose-Headers"] = "Mcp-Session-Id"
+    return resp
+
+
 import app as portal
 from oauth import ISSUER, signing_key
 
@@ -749,13 +759,6 @@ def handle_admin_jsonrpc_request(req_data: Any, actor: Optional[str]) -> Optiona
 # HTTP & SSE Routes for Admin MCP
 # ---------------------------------------------------------------------------
 
-@mcp_admin.after_request
-def _admin_cors_headers(resp):
-    resp.headers["Access-Control-Allow-Origin"] = "*"
-    resp.headers["Access-Control-Allow-Headers"] = "*"
-    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    resp.headers["Access-Control-Expose-Headers"] = "Mcp-Session-Id"
-    return resp
 
 
 @mcp_admin.route("/mcp/admin", methods=["OPTIONS"])
@@ -911,3 +914,22 @@ def mcp_admin_messages():
         if resp is None:
             return ("", 204)
         return jsonify(resp)
+
+
+@mcp_admin.route("/mcp/admin/query", methods=["POST", "OPTIONS"])
+def mcp_admin_query_endpoint():
+    """
+    Interactive natural language AI Assistant query endpoint for departmental officers.
+    Interprets intent, automatically invokes the relevant Admin MCP tool, and returns analytical response.
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    actor = verify_admin_auth(request) or "admin"
+    data = request.get_json(silent=True) or {}
+    query_text = (data.get("query") or "").strip()
+    if not query_text:
+        return jsonify({"error": "Query cannot be empty"}), 400
+
+    import mcp_agent
+    res = mcp_agent.process_admin_query(query_text, actor=actor)
+    return jsonify(res)

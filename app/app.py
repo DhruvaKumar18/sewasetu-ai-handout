@@ -139,10 +139,13 @@ def write_audit(cur, app_id, action, actor, note=""):
 # ---------------------------------------------------------------------------
 
 def parse_dob(raw):
-    try:
-        return datetime.strptime((raw or "").strip(), "%d/%m/%Y").date()
-    except ValueError:
-        return None
+    raw_str = (raw or "").strip()
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(raw_str, fmt).date()
+        except ValueError:
+            pass
+    return None
 
 
 def age_on(dob, on):
